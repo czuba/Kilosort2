@@ -1,3 +1,68 @@
+# _[ks25]_ major changes/updates
+
+[ks25] is a heavily-modified version of the Kilosort spike sorting package for Matlab, tailored for the analysis of non-chronic linear array recordings with modest channel counts (~24-100 ch).
+
+Detailed documentation of significant & ongoing changesto the codebase and detailed parameter recommendations can be found in **the [dev_TODOs.md](dev_TODOs.md) document**.
+
+[My **\[ks25\]** branch](https://github.com/czuba/Kilosort) is based on the Kilosort 2.5 codebase, and attempts to marry some of the more successful features of Kilosort 2.0 (i.e. temporally dynamic waveform templates) with backported features & improvements from the newer Kilosort 2.5 & 3.0 (i.e. a modified version of the 'datashift2' drift correction algorithm).
+
+While the original Kilosort package (by [Marius Pachitariu, et al.](http://github.com/MouseLand/Kilosort)) is an amazing resource for fast & accurate spike sorting of high-channel count high-density silicon probes (e.g. [Neuropixels](https://www.biorxiv.org/content/10.1101/2020.10.27.358291v1); ~100s-1,000s ch, ~15-20µm spacing), out-of-the-box results have been less successful with data collected during non-chronic linear array recordings with comparatively broader inter-electrode spacing (e.g. [Plexon U-Probes](https://plexon.com/products/plexon-u-probe/); 24-64 ch, ~50-100µm spacing).GUI updates
+
+## Overview of changes
+
+Using default Kilosort parameters --directly, or with modest adjustments-- to sort non-chronic recordings from 32-channel linear arrays fails to capture spikes that are easily detectible in the raw & filtered data traces (i.e. well above noise of continuous voltage raw data; see github issue [#63](https://github.com/MouseLand/Kilosort/issues/63) for example screenshot of missed high-amplitude spikes). These issues have been persistent since Kilosort 2.0, and remain throughout versions 2.5 & 3.0.
+
+Amongst other updates & revisions, the **[ks25]** adaptation of Kilosort attempts to address two primary sources of missed units:
+
+1. arbitrary inversion of low-rank template representations (consequence of template updating procedure; w/in template learning & extraction: `learnTemplates.m` & `trackAndSort.m`, respectively)
+2. inadvertent cancellation of spike waveforms with balanced positive- & negative-going components (consequence of template alignment w/in `mexSVDsmall2.cu`)
+   - fix for this necessitated abandoning the ambiguous nature of aligning spikes to _either peak or valley_ (issue [#221](https://github.com/MouseLand/Kilosort/issues/221))
+   - *all templates* are now aligned to the _minimum_ value
+
+Over batches & learning, these two errors result in spurrious batch-sized stuttering of spike detection (github issue [#60](https://github.com/MouseLand/Kilosort/issues/60), [#175](https://github.com/MouseLand/Kilosort/issues/175)), and errrant temporal shifts & polarity inversions that accumulate to missed and/or inadvertently dropped high-amplitude spike templates.
+
+In the process, significant changes have been made to the raw file handling & batch processing (addresses bug reported in issue [#219](https://github.com/MouseLand/Kilosort/issues/219)), `datashift`  drift correction estimation (including fix described in issue [#394](https://github.com/MouseLand/Kilosort/issues/394) ), template learning procedure, spike extraction, calculation of individual spike `template` & `template_feature` amplitudes (i.e. amplitudes output from `mexMPnu8.cu`  & saved for manual curation w/ [Phy2](https://github.com/cortex-lab/phy)), and more.
+
+Finally, it is worth noting that **[ks25] revisions have been implemented with _a primary emphasis on accurate extraction_, at the marginal expense of processing expediency**. When applied to recordings from ~32 channels with raw file sizes in the range of 10-20 GB, these tradeoffs are manageable & [in my hands] necessary for usable spike sorting results. Its quite possible that the balance of time-vs-accuracy tradeoff is tipped when applied to recordings from 100s of channels (e.g. from neuropixels). In such cases, users may already be achieving suitable results from the standard/main [Kilosort](https://github.com/MouseLand/Kilosort) (ver 3.0 at time of writing).
+
+
+
+## Basic [ks25] usage
+
+- Launch standard gui by executing  `>> kilosort` from the Matlab command window
+- Select your **data file** & **output directory** for this kilosort session
+  - If you choose your data file _first_, the output directory will automatically populate with the data file directory
+  - ...because I generally house my converted `.dat` files for a given day in separate `./raw` directory & all kilosort output directories from that day in a `./KiloSort` directory, <u>*I prefer to select output directory first, then select my data file*</u>  
+- Select probe layout file appropriate for your device
+  - default variables & trace view should populate in the gui automatically after a probe file has been selected
+  - Note: this selection must be done even if the probe dropdown already shows the probe file you intend to use
+- Run `ksGUI_updatePars.m` to apply [your] advanced parameter settings to the current gui instance
+  - ***similar to*** simply clicking on the "Set advanced options" button, this will create a `ks` variable in the base workspace comprising a handle to the kilosort gui object
+  - all updates to the `ops` struct w/in `ksGUI_updatePars.m` will be applied to the `ks.ops` struct of the GUI object
+  - ***in addition*** this function ensures that changes made to `ks.ops` are applied to the parameter fields of the GUI
+- Click on the **"Preprocess"** button in the Kilosort GUI interface
+  - this will run initial data preprocessing operations & initialize all important variables in the `ks.rez` struct
+  - create a filtered copy of your data in `<saveDir>/proDat_<saveDirName>.dat` (...replacement naming convention for "temp_wh.dat")
+  - compute & plot data shift estimates (...useful diagnostic, even if no drift correction is going to be applied)
+- After reviewing the driftMaps produced during the preprocessing stages, if all looks good,
+  click on the **"Sort & Save"** button to complete the actual sorting & saving stages
+
+
+
+![](Docs/Screenshot_ks25GuiDataView_niceFit.png)
+
+
+
+---
+
+---
+
+For general information & installation instructions, see the original _README.md_ document text below:
+
+---
+
+
+
 # Kilosort2.5: automated spike sorting with drift correction and template matching on GPUs #
 
 *updated from Kilosort2 on Oct 28, 2020. The repository name has changed to just "Kilosort", and we'll keep track of versions via Github releases.* 

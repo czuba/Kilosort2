@@ -1,4 +1,4 @@
-function igood = get_good_units(rez)
+function [igood, status] = get_good_units(rez)
 
 NN = size(rez.dWU,3);
 sd = zeros(NN, 1); 
@@ -19,5 +19,18 @@ for k = 1:NN
     sd(k) = gather(mean(ds(:) .* mwav(:))/mean(mwav));
     
 end
-igood = rez.good & sd<100;
+if isfield(rez,'good')
+    igood = rez.good & sd<100;
+else
+    igood = sd<100;
+end    
 igood = double(igood);
+
+statStr = sprintf('Found %d good units (of %d total)', sum(igood>0), numel(igood));
+if nargout<2
+    cmdLog(statStr)
+else
+    status = statStr;
+end
+
+end %main function

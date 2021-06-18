@@ -7,7 +7,7 @@ function [wTEMP, wPCA] = extractTemplatesfromSnippets(rez, nPCs, nskip)
 % - useMemMapping by default
 % - corrected buffer usage in isolated_peaks_buffered.m  (prev. "isolated_peaks_new.m")
 % - don't stop reading spike samples at arb. count, continue through all batches
-% - added override [nskip] input to subsample batches (sometimes more sparse is ok for speed)
+% - added override [nskip] input to subsample batches (sometimes more sparse/fine is desired)
 % 
 % ---
 % 2021-xx-xx  TBC  Evolved from original Kilosort
@@ -53,7 +53,7 @@ for ibatch = 1:nskip:Nbatch
         dd(:, 2*size(dd,2)) = 0;
     end
 
-    dd(:, k + [1:size(c,2)]) = c;
+    dd(:, k + (1:size(c,2))) = c;
     k = k + size(c,2);
 
 end
@@ -67,13 +67,16 @@ dd = dd(:, 1:k);
 
 % initialize the template clustering with sampling of waveforms **distributed throughout file duration**
 % wTEMP = dd(:, randperm(size(dd,2), nPCs));
-wTEMP = dd(:, round(linspace(1, size(dd,2), nTEMP)));
+% wTEMP = dd(:, round(linspace(1, size(dd,2), nTEMP)));
+sectSize = floor(size(dd,2)/nTEMP);
+ti = randperm(sectSize, nTEMP) + round(linspace(0, size(dd,2)-sectSize, nTEMP));
+wTEMP = dd(:, ti);
 wTEMP = wTEMP ./ sum(wTEMP.^2,1).^.5; % normalize them
 
 if debugPlot
     % plot evolution of templates extracted from data
     figure(201);
-    set(gcf, 'windowstyle','normal', 'position',[100,400, 2500, 200]);
+    set(gcf, 'name','Kilosort [TEMP]lates', 'windowstyle','normal', 'position',[100,400, 2500, 200]);
     subplot(1,11,1), imagesc(wTEMP)
 end
 
@@ -86,10 +89,18 @@ for i = 1:10
    end
    wTEMP = wTEMP ./ sum(wTEMP.^2,1).^.5; % unit normalize
    
+   if i==10
+       % sort templates by frequency on last iteration
+       tc = histcounts(imax,nTEMP);
+       [~,tord] = sort(tc,'descend');
+       wTEMP = wTEMP(:,tord);
+   end
    if debugPlot
        figure(201); subplot(1,11,i+1); imagesc(wTEMP);
    end
 end
+
+
 
 dd = double(gather(dd));
 [U] = svdecon(dd); % the PCs are just the left singular vectors of the waveforms
@@ -99,12 +110,13 @@ wPCA = gpuArray(single(U(:, 1:nPCs))); % take as many as needed
 % adjust the arbitrary sign of the first PC so its negativity is downward
 % - this is strange...why manipulate sign of PC1, but not the others? --TBC
 if sign(wPCA(ops.nt0min+1,1))>0
-    keyboard; % pause if unexpected polarity
+    fprintf(2, '~!~\tNotice:  sign flip of PC components detected & inverted during extractTemplatesfromSnippets.m operation...\n')
+    %keyboard; % pause if unexpected polarity
     % ...turns out, this never seems to trigger. --TBC 2021
     % If it does, consider applying more complete sign change (e.g. /clustering/template_learning.m)
 end
-wPCA(:,1) = - wPCA(:,1) * sign(wPCA(ops.nt0min+1,1));
+% wPCA(:,1) = - wPCA(:,1) * sign(wPCA(ops.nt0min+1,1));
+wsign = -sign(wPCA(ops.nt0min, 1));
+wPCA = wPCA .* wsign;
 
 end %main function
-
-

@@ -8,13 +8,17 @@ function [rez, X] = splitAllClusters(rez, flag)
 
 ops = rez.ops;
 
-wPCA = gather(ops.wPCA); % use PCA projections to reconstruct templates when we do splits
+wPCA = gather(rez.wPCA); % use PCA projections to reconstruct templates when we do splits
 
 ccsplit = rez.ops.AUCsplit; % this is the threshold for splits, and is one of the main parameters users can change
 
-NchanNear   = min(ops.Nchan, 32);
-Nnearest    = min(ops.Nchan, 32);
+%     NchanNear   = min(ops.Nchan, 32);
+%     Nnearest    = min(ops.Nchan, 32);
 sigmaMask   = ops.sigmaMask;
+% Number of nearest channels to each primary channel
+NchanNear   = getOr(ops, 'NchanNear', min(ops.Nchan, 32));
+Nnearest    = getOr(ops, 'Nnearest', min(ops.Nchan, 32));
+
 
 ik = 0;
 Nfilt = size(rez.W,2);
@@ -34,7 +38,7 @@ nccg = 0;
 while ik<Nfilt
     if rem(ik, 100)==1
       % periodically write updates
-       fprintf('Found %d splits, checked %d/%d clusters, nccg %d \n', nsplits, ik, Nfilt, nccg)
+       fprintf('Found %d splits, checked %d/%d clusters, nccg %d \t\tNew splits: ', nsplits, ik, Nfilt, nccg)
     end
     ik = ik+1;
 
@@ -50,6 +54,8 @@ while ik<Nfilt
     clp0 = rez.cProjPC(isp, :, :); % get the PC projections for these spikes
     clp0 = gpuArray(clp0(:,:));
     clp = clp0 - mean(clp0,1); % mean center them
+
+    clp = clp - my_conv2(clp, 250, 1); % subtract a running average, because the projections are NOT drift corrected
 
     % now use two different ways to initialize the bimodal direction
     % the main script calls this function twice, and does both initializations
@@ -108,7 +114,7 @@ while ik<Nfilt
     end
 
     ilow = rs(:,1)>rs(:,2); % these spikes are assigned to cluster 1
-    %    ps = mean(rs(:,1));
+%     ps = mean(rs(:,1));
     plow = mean(rs(ilow,1)); % the mean probability of spikes assigned to cluster 1
     phigh = mean(rs(~ilow,2)); % same for cluster 2
     nremove = min(mean(ilow), mean(~ilow)); % the smallest cluster has this proportion of all spikes
@@ -117,7 +123,7 @@ while ik<Nfilt
     % did this split fix the autocorrelograms?
     [K, Qi, Q00, Q01, rir] = ccg(ss(ilow), ss(~ilow), 500, dt); % compute the cross-correlogram between spikes in the putative new clusters
     Q12 = min(Qi/max(Q00, Q01)); % refractoriness metric 1
-    R = min(rir);                % refractoriness metric 2
+    R = min(rir); % refractoriness metric 2
 
     % if the CCG has a dip, don't do the split.
     % These thresholds are consistent with the ones from merges.
@@ -127,8 +133,9 @@ while ik<Nfilt
     end
 
     % now decide if the split would result in waveforms that are too similar
-    c1  = wPCA * reshape(mean(clp0(ilow,:),1), 3, []); %  the reconstructed mean waveforms for putatiev cluster 1
-    c2  = wPCA * reshape(mean(clp0(~ilow,:),1), 3, []); %  the reconstructed mean waveforms for putative cluster 2
+    nPCproj = size(rez.cProjPC,2); % must match nPC from spike projections 
+    c1  = wPCA(:,1:nPCproj) * reshape(mean(clp0(ilow,:),1), nPCproj, []); %  the reconstructed mean waveforms for putative cluster 1
+    c2  = wPCA(:,1:nPCproj) * reshape(mean(clp0(~ilow,:),1), nPCproj, []); %  the reconstructed mean waveforms for putative cluster 2
     cc = corrcoef(c1, c2); % correlation of mean waveforms
     n1 =sqrt(sum(c1(:).^2)); % the amplitude estimate 1
     n2 =sqrt(sum(c2(:).^2)); % the amplitude estimate 2
@@ -152,7 +159,7 @@ while ik<Nfilt
        rez.dWU(:,iC(:, iW(ik)),ik)    = c1;
 
        % the temporal components are therefore just the PC waveforms
-       rez.W(:,Nfilt,:) = permute(wPCA, [1 3 2]);
+       rez.W(:,Nfilt,:) = permute(wPCA(:,1:nPCproj), [1 3 2]);
        iW(Nfilt) = iW(ik); % copy the best channel from the original template
        isplit(Nfilt) = isplit(ik); % copy the provenance index to keep track of splits
 
@@ -164,7 +171,9 @@ while ik<Nfilt
 
        rez.iNeigh(:, Nfilt)     = rez.iNeigh(:, ik); % copy neighbor template list from the original
        rez.iNeighPC(:, Nfilt)     = rez.iNeighPC(:, ik); % copy neighbor channel list from the original
-
+       % print new split to command window
+       fprintf(' %d', ik);
+       
        % try this cluster again
        ik = ik-1; % the cluster piece that stays at this index needs to be tested for splits again before proceeding
        % the piece that became a new cluster will be tested again when we get to the end of the list
@@ -173,7 +182,7 @@ while ik<Nfilt
     end
 end
 
-fprintf('Finished splitting. Found %d splits, checked %d/%d clusters, nccg %d \n', nsplits, ik, Nfilt, nccg)
+fprintf('\nFinished splitting. Found %d splits, checked %d/%d clusters, nccg %d \n', nsplits, ik, Nfilt, nccg)
 
 
 Nfilt = size(rez.W,2); % new number of templates

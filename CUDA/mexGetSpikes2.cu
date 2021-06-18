@@ -17,6 +17,11 @@
 #include <iostream>
 using namespace std;
 
+/* orig maxFR (= 5000) was clipping with longer batch durations or high firing rates.
+ * - try 10x and see what happens...NOPE! mex compile error in cleanup_heights: "too much shared data"
+ * - try 5x...NOPE! mex compile error in cleanup_heights: "too much shared data"
+ * - try 2x...NO?!? ...still too much? either really precisely tuned limit, or not efficiently coded
+ */
 const int  Nthreads = 1024, maxFR = 5000, NrankMax = 6;
 //////////////////////////////////////////////////////////////////////////////////////////
 __global__ void  sumChannels(const double *Params, const float *data, 

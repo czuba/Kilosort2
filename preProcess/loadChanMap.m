@@ -1,5 +1,3 @@
-
-
 function [chanMap, xcoords, ycoords, kcoords, NchanTOT] = loadChanMap(cmIn)
 % function [chanMap, xcoords, ycoords, kcoords] = loadChanMap(cmIn)
 %

@@ -1,29 +1,43 @@
-
 function rezToPhy(rez, savePath)
-% pull out results from kilosort's rez to either return to workspace or to
-% save in the appropriate format for the phy GUI to run on. If you provide
-% a savePath it should be a folder, and you will need to have npy-matlab
-% available (https://github.com/kwikteam/npy-matlab)
+% pull out results from kilosort's rez to save for future analysis,
+% and/or manual curation with Phy gui
+%
+% 2021-03-xx  TBC  Updating to better relect temporal variations in template amplitudes, PCs, etc
+% 
 
+%% st3 content:
+% % % % From learnAndSolve8b >> runTemplates >> trackAndSort.m
+% % %     st3(irange,1) = double(st); % spike times
+% % %     st3(irange,2) = double(id0+1); % spike clusters (1-indexing)
+% % %     st3(irange,3) = double(x0); % template amplitudes
+% % %     st3(irange,4) = double(vexp); % residual variance of this spike
+% % %     st3(irange,5) = ibatch; % batch from which this spike was found
 
+%% collect & sort spike vars in local workspace
 % spikeTimes will be in samples, not seconds
 rez.W = gather(single(rez.Wphy));
 rez.U = gather(single(rez.U));
 rez.mu = gather(single(rez.mu));
 
-if size(rez.st3,2)>4
-    rez.st3 = rez.st3(:,1:4);
-end
 
 [~, isort]   = sort(rez.st3(:,1), 'ascend');
 rez.st3      = rez.st3(isort, :);
 rez.cProj    = rez.cProj(isort, :);
 rez.cProjPC  = rez.cProjPC(isort, :, :);
 
+%         % create st3 cell for unit-wise analysis
+%         [uu, ~, ui] = unique(rez.st3(:,2));
+%         st3cell = cell(size(uu));
+%         for i = uu'
+%             st3cell{i} = rez.st3(ii,:);
+%         end
+
+
 % ix = rez.st3(:,4)>12;
 % rez.st3 = rez.st3(ix, :);
 % rez.cProj = rez.cProj(ix, :);
 % rez.cProjPC = rez.cProjPC(ix, :,:);
+
 
 fs = dir(fullfile(savePath, '*.npy'));
 for i = 1:length(fs)
@@ -36,10 +50,15 @@ end
 spikeTimes = uint64(rez.st3(:,1));
 % [spikeTimes, ii] = sort(spikeTimes);
 spikeTemplates = uint32(rez.st3(:,2));
-if size(rez.st3,2)>4
-    spikeClusters = uint32(1+rez.st3(:,5));
-end
+% NO:  st3(:,5) is really batch#, not cluster# (!??...KS1 holdover?)
+% if size(rez.st3,2)>4
+%     spikeClusters = uint32(1+rez.st3(:,5));
+% end
+spikeBatch = uint32(rez.st3(:,5)); 
+
 amplitudes = rez.st3(:,3);
+% Calc amplitudes to reflect temporal variations in waveform templates
+
 
 Nchan = rez.ops.Nchan;
 
@@ -109,8 +128,7 @@ if ~isempty(savePath)
     fileIDA = fopen(fullfile(savePath, 'cluster_Amplitude.tsv'),'w');
     fprintf(fileIDA, 'cluster_id%sAmplitude', char(9));
     fprintf(fileIDA, char([13 10]));
-    
-    rez.est_contam_rate(isnan(rez.est_contam_rate)) = 1;
+        
     for j = 1:length(rez.good)
         if rez.good(j)
             fprintf(fileID, '%d%sgood', j-1, char(9));
@@ -119,8 +137,10 @@ if ~isempty(savePath)
         end
         fprintf(fileID, char([13 10]));
         
-        fprintf(fileIDCP, '%d%s%.1f', j-1, char(9), rez.est_contam_rate(j)*100);
-        fprintf(fileIDCP, char([13 10]));
+        if isfield(rez, 'est_contam_rate')
+            fprintf(fileIDCP, '%d%s%.1f', j-1, char(9), rez.est_contam_rate(j)*100);
+            fprintf(fileIDCP, char([13 10]));
+        end
         
         fprintf(fileIDA, '%d%s%.1f', j-1, char(9), tempAmps(j));
         fprintf(fileIDA, char([13 10]));
@@ -133,11 +153,11 @@ if ~isempty(savePath)
     
     writeNPY(spikeTimes, fullfile(savePath, 'spike_times.npy'));
     writeNPY(uint32(spikeTemplates-1), fullfile(savePath, 'spike_templates.npy')); % -1 for zero indexing
-    if size(rez.st3,2)>4
-        writeNPY(uint32(spikeClusters-1), fullfile(savePath, 'spike_clusters.npy')); % -1 for zero indexing
-    else
-        writeNPY(uint32(spikeTemplates-1), fullfile(savePath, 'spike_clusters.npy')); % -1 for zero indexing
-    end
+%     if size(rez.st3,2)>4
+%         writeNPY(uint32(spikeClusters-1), fullfile(savePath, 'spike_clusters.npy')); % -1 for zero indexing
+%     else
+%         writeNPY(uint32(spikeTemplates-1), fullfile(savePath, 'spike_clusters.npy')); % -1 for zero indexing
+%     end
     writeNPY(amplitudes, fullfile(savePath, 'amplitudes.npy'));
     writeNPY(templates, fullfile(savePath, 'templates.npy'));
     writeNPY(templatesInds, fullfile(savePath, 'templates_ind.npy'));
@@ -187,9 +207,9 @@ if ~isempty(savePath)
                 fprintf('successful!\n\t%s\n',msg)
             else
                 % Note: symlinks won't work on certain file systems (needs extended attributes; not Fat32)
-                fprintf(2, 'failed.\t%s',msg)
+                fprintf(2, 'failed.\n\t%s',msg)
                 fprintf(['\n\t%s','\n\t>>','\n\t%s'...
-                    '\n\tA copy of raw data may need to be manually added to the output directory before starting Phy\n'], rez.ops.fbinary,rez.ops.saveDir);
+                    '\n\tA copy of raw data may need to be added to output directory before starting Phy\n\n'], rez.ops.fbinary,rez.ops.saveDir);
             end
         end
     end
@@ -198,12 +218,9 @@ if ~isempty(savePath)
     if ~exist(fullfile(savePath,'params.py'),'file')
         fid = fopen(fullfile(savePath,'params.py'), 'w');
 
-%        [~, fname, ext] = fileparts(rez.ops.fbinary);
-%         fprintf(fid,['dat_path = ''',fname ext '''\n']);
-%         fprintf(fid,'n_channels_dat = %i\n',rez.ops.NchanTOT);
-        [root, fname, ext] = fileparts(rez.ops.fproc);
-%         fprintf(fid,['dat_path = ''',fname ext '''\n']);
-        fprintf(fid,['dat_path = ''', strrep(rez.ops.fproc, '\', '/') '''\n']);
+        % use relative path name for preprocessed data file in params.py
+        [~, fname, ext] = fileparts(rez.ops.fproc);
+        fprintf(fid, 'dat_path = ''%s''\n', fullfile('.',[fname,ext]));
         
         fprintf(fid,'n_channels_dat = %i\n',rez.ops.Nchan);
         
@@ -215,7 +232,10 @@ if ~isempty(savePath)
             fprintf(fid,'sample_rate = %i.\n',rez.ops.fs);
         end
 %         fprintf(fid,'hp_filtered = False');
-        fprintf(fid,'hp_filtered = True');
+        fprintf(fid,'hp_filtered = True\n');
+        
+        fprintf(fid,'template_scaling = 15.0\n');
+        
         
         fclose(fid);
     end

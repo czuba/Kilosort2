@@ -1,7 +1,18 @@
-function [imin,yblk, F0, F0m] = align_block2(F, ysamp, nblocks)
-
+function [imin,yblk, F0, F0m, targBatch] = align_block2(F, ysamp, ops)
+% 
 % F is y bins by amp bins by batches
 % ysamp are the coordinates of the y bins in um
+% 
+% - updated to take ops struct as third input (instead of just receiving ops.nblocks)
+% - [ops.targBatch] = user selected starting batch for 'datashift' alignment
+%                     (defaults to batch 2/3 into file)
+% - add [targBatch] output
+% 
+
+nblocks = max(ops.nblocks,1);
+% nblocks must be >= 1 for proper initialization, but allow nblocks==0 in cases where
+% we want to compute drift estimates, but not [necessarily] apply them
+debugPlot = ops.fig>1;
 
 Nbatches = size(F,3);
 ysp = median(diff(ysamp));
@@ -18,10 +29,21 @@ Fg = gpuArray(single(F));
 % mean subtraction to compute covariance
 Fg = Fg - mean(Fg, 1);
 
-% initialize the target "frame" with a single sample
-targBatch = floor(size(Fg,3)/3*2) %475 % min(300, floor(size(Fg,3)*2/3));
-%     F0 = Fg(:,:, min(300, floor(size(Fg,3)/2)));
+% initialize the target "frame" from a single batch
+% - allow to define relative location of target batch in file (...allowing flexibility for batch size)
+% - default 2/3 into file
+targBatch = getOr(ops, 'targBatch', 2/3) %475 % min(300, floor(size(Fg,3)*2/3));
+if targBatch<1
+    % set to nearest batch
+    targBatch = floor(size(Fg,3) * targBatch);
+else
+    % just enforce limit for error correction
+    targBatch = min(round(targBatch), size(Fg,3));
+end
+
+% gerget batch is hardcoded
 %F0 = Fg(:,:, targBatch);
+% smooth across neighboring batches before proceeding
 j = ceil(.05 * Nbatches);
 F0 = my_conv2(Fg(:,:, targBatch+[-j:j]), 1, 3);
 F0 = F0(:,:,j+1);
@@ -37,17 +59,20 @@ for t = 1:length(dt)
     dc0(t, :) = gather(sq(mean(mean(circshift(Fg, dt(t), 1) .* F0, 1), 2)));
 end
 
-H = figure;
-spx = 11; spy = niter+1; 
-subplot(spy, spx, 1:spx-1)
-imagesc(1:Nbatches, dt*ysp, dc0);
-ylabel('baseline cov')
-hold on
-plot(targBatch,0,'k*');
-box off
-subplot(spy, spx, spx)
-imagesc(F0);
-box off
+if ops.fig
+    H = figure;
+    spx = 11; spy = niter+1;
+    subplot(spy, spx, 1:spx-1)
+    imagesc(1:Nbatches, dt*ysp, dc0);
+    set(gca, 'YDir','normal');
+    ylabel('baseline cov')
+    hold on
+    plot(targBatch,0,'k*');
+    box off
+    subplot(spy, spx, spx)
+    imagesc(F0);
+    box off
+end
 
 dall = zeros(niter, Nbatches);
 for iter = 1:niter    
@@ -58,8 +83,9 @@ for iter = 1:niter
     end
     
     if iter<niter
-        % smooth
-        dcs = my_conv2(dc, .15*(niter-iter)); % scale smoothing across batches first
+        % apply decreasing amount of smoothing across iterations
+        % - last two iter effectively unsmoothed; (<0.25 clipped inside my_conv2.m)
+        dcs = my_conv2(dc, .1*(niter-iter));
 
         % up until the very last iteration, estimate the best shifts
         [~, imax] = max(dcs, [], 1);
@@ -80,25 +106,23 @@ for iter = 1:niter
         F0 = mean(Fg(:,:, ii(1):ii(2)), 3);
 
     end
-    subplot(spy, spx, (1:spx-1)+iter*spx);     % subplot(niter+1, 1, iter+1)
-    imagesc(1:Nbatches, dt*ysp, dc);
-    hold on
-    % identify target batch region
-    plot(ii, [0 0], '--k', 'linewidth',.5);
-    box off
-    subplot(spy, spx, iter*spx+spx)
-    imagesc(F0);
-    drawnow
-    pause(.2)
+    if ops.fig
+        subplot(spy, spx, (1:spx-1)+iter*spx);     % subplot(niter+1, 1, iter+1)
+        imagesc(1:Nbatches, dt*ysp, dc);
+        set(gca, 'YDir','normal');
+        hold on
+        % plot shift from this iteration
+        plot(1:Nbatches, dall(iter,:).*ysp, 'r:', 'linewidth',.5);
+        % identify target batch region
+        plot(ii, [0 0], '--k', 'linewidth',1);
+        box off
+        subplot(spy, spx, iter*spx+spx)
+        imagesc(F0);
+        drawnow
+    end
 
 end
 
-H = figure;
-subplot(5,1,1:3)
-imagesc(1:Nbatches, dt*ysp, dc);
-hold on
-plot(targBatch,0,'r*');
-box off
 
 % new target frame based on our current best alignment
 F0 = mean(Fg, 3);
@@ -110,10 +134,21 @@ yl = floor(nybins/nblocks)-1;
 ifirst = round(linspace(1, nybins - yl, 2*nblocks-1));
 ilast  = ifirst + yl; %287;
 
-%%
+%% smoothing across blocks
 
-nblocks = length(ifirst);
+%nblocks = length(ifirst);
 yblk = zeros(length(ifirst), 1);
+
+% this is really only informative with multiple blocks (...maybe)
+if ops.fig && nblocks>1
+    H = figure;
+    subplot(5,1,1:3)
+    imagesc(1:Nbatches, dt*ysp, dc);
+    set(gca, 'YDir','normal');
+    hold on
+    plot(targBatch,0,'r*');
+    box off
+end
 
 % for each small block, we only look up and down this many samples to find
 % nonrigid shift
@@ -134,24 +169,36 @@ for j = 1:nblocks
         dcs(t, :, j) = gather(sq(mean(mean(Fs .* F0(isub, :, :), 1), 2)));
     end
 end
-
-figure(H);
-subplot(5,1,4)
-imagesc(1:Nbatches, dt*ysp, dcs);
-ylabel('initial')
-box off
+% plot initial
+if ops.fig && nblocks>1
+    % flatten dcs for image plot
+    dcsFlat = squeeze(num2cell(x,[1,2]));
+    dcsFlat = cat(1, dcsFlat{:});
+    figure(H);
+    subplot(5,1,4)
+    imagesc(1:Nbatches, dt*ysp*nbatches, dcsFlat);
+    set(gca, 'YDir','normal');
+    ylabel('initial')
+    box off
+end
 
 % to find sub-integer shifts for each block , 
 % we now use upsampling, based on kriging interpolation
 dtup = linspace(-n, n, (2*n*10)+1);    
 K = kernelD(dt,dtup,1); % this kernel is fixed as a variance of 1
 dcs = my_conv2(dcs, .5, [1, 2, 3]); % some additional smoothing for robustness, across all dimensions
-
-figure(H);
-subplot(5,1,5)
-imagesc(1:Nbatches, dt*ysp, dcs);
-ylabel('smoothed')
-box off
+% plot smoothed
+if ops.fig && nblocks>1
+    % flatten dcs for image plot
+    dcsFlat = squeeze(num2cell(x,[1,2]));
+    dcsFlat = cat(1, dcsFlat{:});
+    figure(H);
+    subplot(5,1,5)
+    imagesc(1:Nbatches, dt*ysp, dcsFlat);
+    set(gca, 'YDir','normal');
+    ylabel('smoothed')
+    box off
+end
 
 imin = zeros(Nbatches, nblocks);
 for j = 1:nblocks

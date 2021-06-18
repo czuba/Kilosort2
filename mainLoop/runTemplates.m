@@ -18,10 +18,6 @@ function rez = runTemplates(rez)
 
 % update: these recommendations no longer apply for the datashift version!
 
-if sum(isfield(rez, {'istart'}))<1
-    warning('if using pre-loaded templates, please specify istart, defaulting to 1');
-    rez.istart = 1;
-end
 
 if sum(isfield(rez, {'W', 'U', 'mu'}))<3
     error('missing at least one field: W, U, mu');
@@ -30,6 +26,14 @@ end
 Nbatches = rez.ops.Nbatch;
 
 iorder = 1:Nbatches;
+
+% Tested "middle-out" method of extraction...no clear benefit
+% % start extraction at targBatch, 
+% % proceed in reverse-direction to start of file,
+% % jump back to targBatch (recalling state at end of learning)
+% % then sort in forward direction to end of file
+% iorder = [(rez.ops.targBatch-1):-1:1, rez.ops.targBatch:1:Nbatches];
+rez.orderExtract = iorder;
 
 [rez, st3, fW,fWpc] = trackAndSort(rez, iorder);
 
@@ -41,7 +45,7 @@ iorder = 1:Nbatches;
 % fWpc = fWpc(:, :, isort);
 
 % just display the total number of spikes
-fprintf( 'Number of spikes before applying cutoff: %d\n', size(st3,1));
+fprintf( 'Number of spikes extracted (before any postProcessing): %d\n', size(st3,1));
 
 rez.st3 = st3;
 rez.st2 = st3; % keep also an st2 copy, because st3 will be over-written by one of the post-processing steps
@@ -53,3 +57,77 @@ rez.cProj    = fW';
 rez.cProjPC     = permute(fWpc, [3 2 1]); %zeros(size(st3,1), 3, nNeighPC, 'single');
 % iNeighPC keeps the indices of the channels corresponding to the PC features
 
+
+%% Prep rez for postprocessing
+% precompute any unique outputs of postprocessing stages so that they can be skipped as needed
+% (...without breaking downstream analyses)!
+
+Nfilt = size(rez.W,2); % new number of templates
+Nrank = 3;
+Nchan = rez.ops.Nchan;
+NchanNear   = rez.ops.NchanNear;    %min(Nchan, 32);
+Nnearest    = rez.ops.Nnearest;    %min(Nchan, 32);
+nt0 = rez.ops.nt0;
+nt0min = rez.ops.nt0min;
+sigmaMask   = rez.ops.sigmaMask;
+
+Params     = double([0 Nfilt 0 0 size(rez.W,1) Nnearest ...
+    Nrank 0 0 Nchan NchanNear nt0min 0]); % make a new Params to pass on parameters to CUDA
+
+% determine what channels each template lives on
+[iC, mask, C2C] = getClosestChannels(rez, sigmaMask, NchanNear); 
+
+% find the peak abs channel for each template
+[~, iW] = max(abs(rez.dWU(nt0min, :, :)), [], 2);
+iW = squeeze(int32(iW));
+
+% we need to re-estimate the spatial profiles
+[Ka, Kb] = getKernels(rez.ops, 10, 1); % we get the time upsampling kernels again
+[rez.W, rez.U, rez.mu] = mexSVDsmall2(Params, rez.dWU, rez.W, iC-1, iW-1, Ka, Kb); % we run SVD
+
+[WtW, iList] = getMeWtW(single(rez.W), single(rez.U), Nnearest); % we re-compute similarity scores between templates
+rez.iList = iList; % over-write the list of nearest templates
+
+rez.iNeigh   = gather(iList(:, 1:Nfilt)); % get the new neighbor templates
+rez.iNeighPC    = gather(iC(:, iW(1:Nfilt))); % get the new neighbor channels
+
+% Calculate simScore including temporal lag
+% - cranky implementation due to differences in rez.W and wPCA dimensions
+%  - weird/deep inconsistencies & hardcoding of how many PCs are preserved (3, 6, 2*3?<!?)
+rez.simScore = calc_SimScore(rez);
+
+rez.Wphy = cat(1, zeros(1+nt0min, Nfilt, Nrank), rez.W); % for Phy, we need to pad the spikes with zeros so the spikes are aligned to the center of the window
+
+
+
+%% Retain compressed time-varying templates
+% - revived from A.Bondy Kilosort 2[.5?] fork
+% this whole next block is just done to compress the compressed templates
+% we separately svd the time components of each template, and the spatial components
+% this also requires a careful decompression function, available somewhere in the GUI code
+
+nKeep = min([Nchan*3,Nbatches,20]); % how many PCs to keep
+rez.W_a = zeros(nt0 * Nrank, nKeep, Nfilt, 'single');
+rez.W_b = zeros(Nbatches, nKeep, Nfilt, 'single');
+rez.U_a = zeros(Nchan* Nrank, nKeep, Nfilt, 'single');
+rez.U_b = zeros(Nbatches, nKeep, Nfilt, 'single');
+for j = 1:Nfilt
+    % do this for every template separately
+    WA = reshape(rez.WA(:, j, :, :), [], Nbatches);
+    WA = gpuArray(WA); % svd on the GPU was faster for this, but the Python randomized CPU version might be faster still
+    [A, B, C] = svdecon(WA);
+    % W_a times W_b results in a reconstruction of the time components
+    rez.W_a(:,:,j) = gather(A(:, 1:nKeep) * B(1:nKeep, 1:nKeep));
+    rez.W_b(:,:,j) = gather(C(:, 1:nKeep));
+    
+    UA = reshape(rez.UA(:, j, :, :), [], Nbatches);
+    UA = gpuArray(UA);
+    [A, B, C] = svdecon(UA);
+    % U_a times U_b results in a reconstruction of the time components
+    rez.U_a(:,:,j) = gather(A(:, 1:nKeep) * B(1:nKeep, 1:nKeep));
+    rez.U_b(:,:,j) = gather(C(:, 1:nKeep));
+end
+
+fprintf('Finished compressing time-varying templates \n')
+
+end % main function
