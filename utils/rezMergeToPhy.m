@@ -1,7 +1,17 @@
 function rezMergeToPhy(rez1, rez2, savePath)
-% merge two kilosort rez structs into one,
-% save all requisit output files for loading merged dataset into Phy
+% function rezMergeToPhy(rez1, rez2, savePath)
+% 
+% Merge two kilosort rez structs into one,
+% Save all requisit output files for loading merged dataset into Phy
 %
+%   ~~~ Not Recommended ~~~
+%   Integration of template & feature projections of two independent
+%   kilosort sessions requires recomputing all spike projections
+%   and reassessing template similarity across merged set.
+%   ...short of that, only thing recoverable from rough merge of two
+%   sessions is really high amp units that would probably be tracked
+%   just fine if they were sorted together in the first place.
+% 
 % ---
 %   W.I.P.:: does not handle template or feature projections, which
 %   are typically excluded from rez.mat save struct, and should really
@@ -9,8 +19,9 @@ function rezMergeToPhy(rez1, rez2, savePath)
 %   & feature projections of coherent clusters from each rez session)
 % ---
 % 2021-06-xx  TBC  Hacked together based on standard rezToPhy.m
-%                  
+% 2021-06-21  TBC  Abandon all hope, ye who enter here...
 % 
+
 
 %% st3 content:
 % % % % From learnAndSolve8b >> runTemplates >> trackAndSort.m
@@ -20,7 +31,8 @@ function rezMergeToPhy(rez1, rez2, savePath)
 % % %     st3(irange,4) = double(vexp); % residual variance of this spike
 % % %     st3(irange,5) = ibatch; % batch from which this spike was found
 
-%% collect & sort spike vars in local workspace
+
+%% Parse inputs & combine rez structs
 
 if ~exist(savePath,'dir')
     mkdir(savePath);
@@ -44,18 +56,6 @@ ntemps = cumsum([0, arrayfun(@(x) length(x.mu), rez)]);
 %% clear input rez vars (excess memory overhead)
 clear rez1 rez2
 
-%     % already done when rez.mat created 
-%     % spikeTimes will be in samples, not seconds
-%     rez.W = gather(single(rez.Wphy));
-%     rez.U = gather(single(rez.U));
-%     rez.mu = gather(single(rez.mu));
-
-
-%     % already done when rez.mat created 
-%     [~, isort]   = sort(rez.st3(:,1), 'ascend');
-%     rez.st3      = rez.st3(isort, :);
-%     rez.cProj    = rez.cProj(isort, :);
-%     rez.cProjPC  = rez.cProjPC(isort, :, :);
 
 %% clear existing/conflicting files from destination
 fs = dir(fullfile(savePath, '*.npy'));
@@ -102,9 +102,9 @@ chanMap0ind = chanMap - 1;
 nt0 = size(rez(1).W,1);
 
 
-U = arrayfun(@(x) x.U, rez,'uni',0);
+U = arrayfun(@(x) x.U, rez, 'uni',0);
 U = cat(2, U{:}); % must do two step for multi dimensional
-W = arrayfun(@(x) x.W, rez,'uni',0);
+W = arrayfun(@(x) x.W, rez, 'uni',0);
 W = cat(2, W{:});
 
 % total number of templates
@@ -117,19 +117,47 @@ end
 templates = permute(templates, [3 2 1]); % now it's nTemplates x nSamples x nChannels
 templatesInds = repmat((0:size(templates,3)-1), size(templates,1), 1); % we include all channels so this is trivial
 
-% cProj & cProjPC fields are typically excluded from rez.mat save
-% because can balloon file into gigs of data
-%     if isfield(rez, 'cProj') && all(arrayfun(@(x) ~isempty(x.cProj), rez))
-%         templateFeatures = rez.cProj;
-%         templateFeatureInds = uint32(rez.iNeigh);
-%         pcFeatures = rez.cProjPC;
-%         pcFeatureInds = uint32(rez.iNeighPC);
-%     end
+%% Feature & PC projections
+% Nope, this really fails. Kludge between this half-measure and Phy's readout of these features
+% is no better than actually concatenating the two Kilosort sessions in the first place
+% 
+%         % cProj & cProjPC fields are typically excluded from rez.mat save because can balloon file into gigs of data
+%         % - simply concatenating these values is not quite legitimate, but may roughly gets the job done
+%         %   (...with no more evils than already present in standard kilosort feature calc)
+%         % - Really, this should recompute features, simiilarity, & pc projections based on concatenated template set (W & U).
+%         %   BUT that involves running through every template & spike waveform (extracted from processed data)
+%         %   which would really need it's own CUDA function, but is probably better done w/in Phy anyway....
+%         % - ...so this will have to do for now.
+%         if isfield(rez, 'cProj') && all(arrayfun(@(x) ~isempty(x.cProj), rez))
+%             % cProj are template feature projections 
+%             templateFeatures = cell2mat(arrayfun(@(x) x.cProj, rez, 'uni',0)');
+%             % iNeigh are indices into similar **templates** & need to be adjusted to match concatenated template indices
+%             templateFeatureInds = arrayfun(@(x) uint32(x.iNeigh + ntemps(x.rid)), rez, 'uni',0);
+%             templateFeatureInds = cat(2, templateFeatureInds{:});
+%             % cProjPC are PC projections onto nearby channels
+%             pcFeatures = arrayfun(@(x) x.cProjPC, rez, 'uni',0);
+%             pcFeatures = cat(1, pcFeatures{:});
+%             % iNeighPC are indices into nearby **channels** & DO NOT need to be adjusted
+%             pcFeatureInds = arrayfun(@(x) uint32(x.iNeighPC), rez, 'uni',0);
+%             pcFeatureInds = cat(2, pcFeatureInds{:});
+% 
+%             %     templateFeatures = rez.cProj;
+%             %     templateFeatureInds = uint32(rez.iNeigh);
+%             %     pcFeatures = rez.cProjPC;
+%             %     pcFeatureInds = uint32(rez.iNeighPC);
+%         end
 
-% Here things get tricky
-% whiteningMatrix = rez.Wrot/rez.ops.scaleproc;
-% whiteningMatrix = eye(size(rez.Wrot)) / rez.ops.scaleproc;
-% ...luckily, this isn't actually using the whitening matrix, just undoing the scaleproc
+% Combine whitening matrix & inverse
+% Here things get tricky...or maybe not.
+% - rezToPhy stopped using the actual whitening matrix when transitioned to datashift method;
+%   'whitening_mat.npy' (& the inverse) is just undoing the scaleproc now.
+%           whiteningMatrix = rez.Wrot/rez.ops.scaleproc;               % pre-datashift
+%           whiteningMatrix = eye(size(rez.Wrot)) / rez.ops.scaleproc;  % post-datashift
+% So as long as both structs use the same scaleproc, this should be fine
+if rez(1).ops.scaleproc ~= rez(end).ops.scaleproc
+    warning('Incompatible scaling parameters used in rez structs. [rez.ops.scaleproc] must be identical.')
+    keyboard
+end
 whiteningMatrix = eye(size(rez(1).Wrot)) / rez(1).ops.scaleproc;
 whiteningMatrixInv = whiteningMatrix^-1;
 
@@ -210,13 +238,17 @@ if ~isempty(savePath)
     writeNPY(chanMap0ind,   fullfile(savePath, 'channel_map.npy'));
     writeNPY([xcoords ycoords],     fullfile(savePath, 'channel_positions.npy'));
     
+    % % Template projections may be salvagable, but exclude for now
+    %     if exist('templateFeatures','var')
+    %         writeNPY(templateFeatures, fullfile(savePath, 'template_features.npy'));
+    %         writeNPY(templateFeatureInds'-1, fullfile(savePath, 'template_feature_ind.npy'));% -1 for zero indexing
+    %     end
     
-%     % excluded from rez merge....
-%     writeNPY(templateFeatures, fullfile(savePath, 'template_features.npy'));
-%     writeNPY(templateFeatureInds'-1, fullfile(savePath, 'template_feature_ind.npy'));% -1 for zero indexing
-%     writeNPY(pcFeatures, fullfile(savePath, 'pc_features.npy'));
-%     writeNPY(pcFeatureInds'-1, fullfile(savePath, 'pc_feature_ind.npy'));% -1 for zero indexing
-
+    % % Feature projections excluded from rez merge...must be fully recomputed, & beyond scope of this bandaid
+    %     if exist('pcFeatures','var')    
+    %         writeNPY(pcFeatures, fullfile(savePath, 'pc_features.npy'));
+    %         writeNPY(pcFeatureInds'-1, fullfile(savePath, 'pc_feature_ind.npy'));% -1 for zero indexing
+    %     end
 
     writeNPY(whiteningMatrix,       fullfile(savePath, 'whitening_mat.npy'));
     writeNPY(whiteningMatrixInv,    fullfile(savePath, 'whitening_mat_inv.npy'));
@@ -239,25 +271,6 @@ if ~isempty(savePath)
     KSLabelFilename = fullfile(savePath, 'cluster_KSLabel.tsv');
     copyfile(KSLabelFilename, fullfile(savePath, 'cluster_group.tsv'));
 
-    %     % if raw/binary data file location is not same as save destination,
-    %     % attempt to create symlink to raw file
-    %     if ~strcmpi( fileparts(rez.ops.fbinary), rez.ops.saveDir)
-    %         fprintf(2, ['\n\tWARNING: raw data directory and save output data directory are distinct locations.'...
-    %             '\n\tAttempt to create symlink to raw data in save output directory...']);
-    %         try
-    %             [~, fname, ext] = fileparts(rez.ops.fbinary);
-    %             [err, msg] = system( sprintf('ln -sv %s %s', rez.ops.fbinary, fullfile(rez.ops.saveDir, [fname ext]) ));
-    %             if ~err
-    %                 fprintf('successful!\n\t%s\n',msg)
-    %             else
-    %                 % Note: symlinks won't work on certain file systems (needs extended attributes; not Fat32)
-    %                 fprintf(2, 'failed.\n\t%s',msg)
-    %                 fprintf(['\n\t%s','\n\t>>','\n\t%s'...
-    %                     '\n\tA copy of raw data may need to be added to output directory before starting Phy\n\n'], rez.ops.fbinary,rez.ops.saveDir);
-    %             end
-    %         end
-    %     end
-    
     %make params file
     if ~exist(fullfile(savePath,'params.py'),'file')
         fid = fopen(fullfile(savePath,'params.py'), 'w');
@@ -286,3 +299,4 @@ if ~isempty(savePath)
 end
 
 end %main function
+

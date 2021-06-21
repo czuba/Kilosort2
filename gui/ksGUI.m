@@ -1053,8 +1053,8 @@ classdef ksGUI < handle
             fprintf('\n---\tPruning fields from rez struct before saving as .mat:')
             theseFields = {};
             % .cProj & .cProjPC     remove feature projections from rez (default of original ksGUI.m)
-            % ... these are REALLY BIG (nspikes x 32; easily 100s of MB to multiple GB on their own)
-            % ... these get written out as template_features.npy & pc_features.npy during rezToPhy, so they are not lost by discarding them here
+            % - these are REALLY BIG (nspikes x 32; easily 100s of MB to multiple GB on their own)
+            % - these get written out as template_features.npy & pc_features.npy during rezToPhy, so they are not lost by discarding them here
             theseFields = [theseFields, 'cProj', 'cProjPC'];
 %             % .WA & .UA     temporally dynamic template shape and channel weighting matrices    (.WA == [nt0, nUnits, nPC, nBatches]; .UA == [nChan, nUnits, nPC, nBatches])
 %             theseFields = [theseFields, 'WA', 'UA'];  

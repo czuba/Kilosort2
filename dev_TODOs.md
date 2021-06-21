@@ -1,14 +1,16 @@
-# **KS25** major changes/updates
+# **ks25** major changes & updates
 
-KS25 is a heavily-modified version of the Kilosort spike sorting package for Matlab, tailored for the analysis of non-chronic linear array recordings with modest channel counts (~24-100 ch).
+[ks25] is a heavily-modified version of the Kilosort spike sorting package for Matlab, tailored for the analysis of non-chronic linear array recordings with modest channel counts (~24-100 ch).
 
-[My **[ks25\]** branch](https://github.com/czuba/Kilosort) is based on the Kilosort 2.5 codebase, and attempts to marry some of the more successful features of Kilosort 2.0 (i.e. temporally dynamic waveform templates) with backported features & improvements from the newer Kilosort 2.5 & 3.0 (i.e. a modified version of the 'datashift2' drift correction algorithm).
+[My **\[ks25\]** branch](https://github.com/czuba/Kilosort) is based on the Kilosort 2.5 codebase, and attempts to marry some of the more successful features of Kilosort 2.0 (i.e. temporally dynamic waveform templates) with backported features & improvements from the newer Kilosort 2.5 & 3.0 (i.e. a modified version of the 'datashift2' drift correction algorithm).
 
 While the original Kilosort package (by [Marius Pachitariu, et al.](http://github.com/MouseLand/Kilosort)) is an amazing resource for fast & accurate spike sorting of high-channel count high-density silicon probes (e.g. [Neuropixels](https://www.biorxiv.org/content/10.1101/2020.10.27.358291v1); ~100s-1,000s ch, ~15-20µm spacing), out-of-the-box results have been less successful with data collected during non-chronic linear array recordings with comparatively broader inter-electrode spacing (e.g. [Plexon U-Probes](https://plexon.com/products/plexon-u-probe/); 24-64 ch, ~50-100µm spacing).GUI updates
 
 ## Overview of changes
 
 Using default Kilosort parameters --directly, or with modest adjustments-- to sort non-chronic recordings from 32-channel linear arrays fails to capture spikes that are easily detectible in the raw & filtered data traces (i.e. well above noise of continuous voltage raw data; see github issue [#63](https://github.com/MouseLand/Kilosort/issues/63) for example screenshot of missed high-amplitude spikes). These issues have been persistent since Kilosort 2.0, and remain throughout versions 2.5 & 3.0.
+
+### Preventing template inversions
 
 Amongst other updates & revisions, the **[ks25]** adaptation of Kilosort attempts to address two primary sources of missed units:
 
@@ -21,13 +23,28 @@ Over batches & learning, these two errors result in spurrious batch-sized stutte
 
 In the process, significant changes have been made to the raw file handling & batch processing (addresses bug reported in issue [#219](https://github.com/MouseLand/Kilosort/issues/219)), `datashift`  drift correction estimation (including fix described in issue [#394](https://github.com/MouseLand/Kilosort/issues/394) ), template learning procedure, spike extraction, calculation of individual spike `template` & `template_feature` amplitudes (i.e. amplitudes output from `mexMPnu8.cu`  & saved for manual curation w/ [Phy2](https://github.com/cortex-lab/phy)), and more.
 
-Finally, it is worth noting that **[ks25] revisions have been implemented with _a primary emphasis on accurate extraction_, at the marginal expense of processing expediency**. When applied to recordings from ~32 channels with raw file sizes in the range of 10-20 GB, these tradeoffs are manageable & [in my hands] necessary for usable spike sorting results. Its quite possible that the balance of time-vs-accuracy tradeoff is tipped when applied to recordings from 100s of channels (e.g. from neuropixels). In such cases, users may already be achieving suitable results from the standard/main [Kilosort](https://github.com/MouseLand/Kilosort) (ver 3.0 at time of writing).
+### Tightened amplitude projections
 
-#### `temp_wh.dat` renamed
+[ks25] utilizes "_pcTight" variants of certain mex/cuda functions, which compute template & feature projections using a temporal window more tightly restricted around the spike timestamp.
+
+- instead of using the whole waveform `t= 0:nt0` , these variants use samples ranging from `t = 6:nt0-15` when computing feature & template projection amplitudes
+  - using the default value of `nt0 = 61` samples, this corresponds to a _waveform projection window 40 samples long_
+    - ...at 40kHz, this translates to a 1 usec waveform projection, instead of 1.5 usec
+  - the full `nt0` range of samples are still used for all _spike subtraction operations_
+
+Narrowing of the projection window to exclude less informative samples in the tails of the waveform improves specificity of template & amplitude features without leaving tails in the raw data after subtraction.
+
+### `temp_wh.dat` renamed
 
 Since the `datashift` method of drift correction is applied _directly to the preprocessed data file_, `ops.fproc`, the nature of this copy of the raw data has transitioned from a relatively temporary/working copy to the actual instantiation the drift correction. When applied (i.e. `ops.nblocks`>0), attempting to map spike timestamps back to the original raw file will [more than likely] not actually correspond to the voltage(s) produced at the time of the spiking response. Therefore, It is now important that this preprocessed copy of the data be retained after sorting. Correspondingly, **the default filename for the proprocessed data file has been updated to `proDat_<saveDirName>.dat`** (formerly called `temp_wh.dat`; still created w/in `preprocessDataSub.m`).
 
 In additon to reflecting the non-temporary nature of the preprocessed data file, this naming scheme also adds important sort origin information to the file.
+
+---
+
+Finally, it is worth noting that **[ks25] revisions have been implemented with _a primary emphasis on accurate extraction_, at the marginal expense of processing expediency**. When applied to recordings from ~32 channels with raw file sizes in the range of 10-20 GB, these tradeoffs are manageable & [in my hands] necessary for usable spike sorting results. Its quite possible that the balance of time-vs-accuracy tradeoff is tipped when applied to recordings from 100s of channels (e.g. from neuropixels). In such cases, users may already be achieving suitable results from the standard/main [Kilosort](https://github.com/MouseLand/Kilosort) (ver 3.0 at time of writing).
+
+---
 
 
 
@@ -40,7 +57,7 @@ In additon to reflecting the non-temporary nature of the preprocessed data file,
 - Select probe layout file appropriate for your device
   - default variables & trace view should populate in the gui automatically after a probe file has been selected
   - Note: this selection must be done even if the probe dropdown already shows the probe file you intend to use
-- Run `ksGUI_updatePars.m` to apply [your] advanced parameter settings to the current gui instance
+- Run **`ksGUI_updatePars.m`** to apply [your] advanced parameter settings to the current gui instance
   - ***similar to*** simply clicking on the "Set advanced options" button, this will create a `ks` variable in the base workspace comprising a handle to the kilosort gui object
   - all updates to the `ops` struct w/in `ksGUI_updatePars.m` will be applied to the `ks.ops` struct of the GUI object
   - ***in addition*** this function ensures that changes made to `ks.ops` are applied to the parameter fields of the GUI
@@ -57,27 +74,13 @@ In additon to reflecting the non-temporary nature of the preprocessed data file,
 
 # Parameter updates & initialization function
 
-Summary
 
-### **`ksGUI_updatePars.m`**
-
-Helper function for updating sorting parameters in the current Kilosort GUI instance
-
-- Launch standard gui by executing  `>> kilosort` from the command window
-- Select your **data file** & **output directory** for this kilosort session
-- Select probe layout file appropriate for your device
-  - default variables & trace view should populate in the gui automatically
-- run `ksGUI_updatePars.m` to apply [your] advanced parameter settings to the current gui instance
-  - ***similar to*** simply clicking on the "Set advanced options" button, this will create a `ks` variable in the base workspace comprising a handle to the kilosort gui object
-  - all updates to the `ops` struct w/in `ksGUI_updatePars.m` will be applied to the `ks.ops` struct of the GUI object
-  - ***in addition*** this function ensures that changes made to `ks.ops` are applied to the parameter fields of the GUI
-- click on the "Run All" button in the Kilosort GUI interface
 
 ## New processing flags
 
 Lots of new flags to fine tune various sorting operations.
 
-Definitions & recommendations from `ksGUI_updatePars.m`:
+Definitions & recommendations from **`ksGUI_updatePars.m`**:
 
 ### General file handling & verbosity
 
@@ -189,40 +192,26 @@ Updated handling & creation of recording device channel map file ("chanMap")
 
 ## Probe geometry
 
-Probe style/geometry used during **ks25** code development:
+[ks25] was developed with the intention/hope of providing more usable sorting results for a broad range of multi-channel recording devices that exist with a modest channel count & electrode spacing in the 50-100 um range. Testing & development has only been done with a single style/geometry of Plexon U-Probe recordings in awake-behaving NHP.
 
-- 32 channel Plexon Uprobes
-
+- 32 channel Plexon U-Probes
 - stereotrode configuration
 
   - two rows of 16 electrode sites
   - [50, 100] um spacing   ( [x, y];  um [within, between] stereo pairs)
+- continuous voltages acquired at 40kHz resolution using Plexon OmniPlex system ("DigiAmp" version)
 
-- since recording depth is tared when the most distal electrode (ch32) discernibly enters brain (dampening of noise & faintly detectable hash), the kilosort channel map is formatted as:
+Since recording depth is tared when the most distal electrode (ch32) discernibly enters brain (dampening of noise & faintly detectable hash), the kilosort channel map is formatted as:
 
-  ```matlab
-  % chanMap coordinates
-  nchan = 32; ysp = 100; xsp = 50;
-  yc = ((nchan/2-1)*ysp):-ysp:0;
-  yc = kron( yc, [1 1])';
-  xc = repmat( xsp*[-.5,.5], [1,nchan/2])';
-  
-  % create chanMap struct
-  clear cm;
-  cm.name = 'uProbe32stereo40k_example';
-  cm.chanMap = (1:nchan)';
-  cm.chanMap0ind = cm.chanMap-1;
-  cm.connected = true(size(cm.chanMap));
-  cm.fs = 40000;  % continuous sampling frequency (Hz)
-  cm.xcoords = xc;  % um
-  cm.ycoords = yc;  % um
-  
-  % save it
-  ksRoot = fileparts(which('kilosort'));
-  save(fullfile(ksRoot, 'configFiles', [cm.name, '.mat']), '-struct', 'cm');
-  ```
-  
-  
+This channel map is included in the `./configFiles` directory as `uProbe32stereo40k.mat`, and can be easily [re]created with the updated channel map creation function:
+
+```matlab
+cm = createChannelMapFile(32, 100, 50, 2, 'name','uProbe32stereo40k','configFxn','ksGUI_updatePars')
+```
+
+- for other chanMap default files (including those from the original Kilosort repository), check the `./configFiles/unused` directory
+
+
 
 ## General processing & thresholds:
 
@@ -281,6 +270,10 @@ ops.nSkipCov    = 1; %batchSkips;  % 1; % compute whitening matrix from every N-
 
 - If there are moments of the session in which a relatively abrupt shift occurs, use the drift estimates & `ops.integerShifts = 1` to identify the time of abrupt shift, then separately sort those segments of the file & merge the sorted results post-hoc
   - Admittedly, this is easier said than done. There is a new utility function called **`rezMergeToPhy.m`** that will [attempt to] merge the [rez] structs from two separate Kilosort sessions into one output directory that can be loaded into Phy for manual curation & integration.
+  
+  - ***Update/correction***:  due to the way that Kilosort & Phy currently interact, merging two `rez` structs together into something that resembles a usable Phy output is significantly more complicated than one might hope/expect. In light of significant changes that are expected from a [long-in-the-works](https://github.com/cortex-lab/phy/issues/1040) refactoring of Phy (_as of Nov 2020, it was stated that it was ["not going to be ready until some time next year"](https://github.com/cortex-lab/phy/issues/1042)_), and the still non-functional state of feature projections in Kilosort 3 (see [issue 317](https://github.com/MouseLand/Kilosort/issues/317)), putting more work into this band-aid session merge does not seem like the best way to go   
+  
+    ​    --TBC, circa June 2021
 - If drift apparent in the driftMap is more gradual, try allowing template dynamics to absorb variation due to probe shift
 
 ```matlab

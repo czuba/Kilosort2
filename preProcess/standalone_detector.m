@@ -85,7 +85,7 @@ for k = 1:ops.Nbatch
     Params = [size(dataRAW,1) ops.Nchan ops.nt0 NchanNear NrankPC ops.nt0min spkTh NchanUp NchanNearUp sig];
 
     % run the CUDA function on this batch
-    [~, ~, st, cF] = spikedetector3(Params, dataRAW, wTEMP, iC-1, dist, v2, iC2-1, dist2);
+    [~, ~, st, cF] = spikedetector3_pcTight(Params, dataRAW, wTEMP, iC-1, dist, v2, iC2-1, dist2);
     
     % upsample the y position using the center of mass of template products
     % coming out of the CUDA function. 

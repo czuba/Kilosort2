@@ -1,4 +1,4 @@
-# _[ks25]_ major changes/updates
+# _[ks25]_ major changes & updates
 
 [ks25] is a heavily-modified version of the Kilosort spike sorting package for Matlab, tailored for the analysis of non-chronic linear array recordings with modest channel counts (~24-100 ch).
 
