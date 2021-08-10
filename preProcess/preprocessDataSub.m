@@ -1,4 +1,18 @@
 function [rez, DATA] = preprocessDataSub(ops)
+% this function takes an ops struct, which contains all the Kilosort2 settings and file paths
+% and creates a new binary file of preprocessed data, logging new variables into rez.
+% The following steps are applied:
+% 1) conversion to float32;
+% 2) common median subtraction;
+% 3) bandpass filtering;
+% 4) channel whitening;
+% 5) scaling to int16 values
+
+% track git repo(s) with new utility (see <kilosortBasePath>/utils/gitStatus.m)
+if getOr(ops, 'useGit', 0)
+    ops = gitStatus(ops);
+end
+
 t0 = tic;
 ops.nt0 	= getOr(ops, {'nt0'}, 61);
 ops.nt0min  = getOr(ops, 'nt0min', ceil(20 * ops.nt0/61));
@@ -19,21 +33,24 @@ ops.Nbatch = Nbatch;
 [chanMap, xc, yc, kcoords, NchanTOTdefault] = loadChanMap(ops.chanMap);
 ops.NchanTOT = getOr(ops, 'NchanTOT', NchanTOTdefault);
 
-if getOr(ops, 'minfr_goodchannels', .1)>0
-    
-    % determine bad channels
-    fprintf('Time %3.0fs. Determining good channels.. \n', toc(t0));
-
-    igood = get_good_channels(ops, chanMap);
-    xc = xc(igood);
-    yc = yc(igood);
-    kcoords = kcoords(igood);
-    chanMap = chanMap(igood);
-        
-    ops.igood = igood;
-else
-    ops.igood = true(size(chanMap));
-end
+% ... Never drop out channels during kilosorting
+%     - This should be done manually, only if absolutely necessary
+ops.igood = true(size(chanMap));
+% if getOr(ops, 'minfr_goodchannels', .1)>0
+%     
+%     % determine bad channels
+%     fprintf('Time %3.0fs. Determining good channels.. \n', toc(t0));
+% 
+%     igood = get_good_channels(ops, chanMap);
+%     xc = xc(igood);
+%     yc = yc(igood);
+%     kcoords = kcoords(igood);
+%     chanMap = chanMap(igood);
+%         
+%     ops.igood = igood;
+% else
+%     ops.igood = true(size(chanMap));
+% end
 
 ops.Nchan = numel(chanMap);
 ops.Nfilt = getOr(ops, 'nfilt_factor', 4) * ops.Nchan;

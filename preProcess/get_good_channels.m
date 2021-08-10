@@ -1,4 +1,5 @@
 function igood = get_good_channels(ops, chanMap)
+% use mad instead of std  (https://github.com/MouseLand/Kilosort/issues/357)
 
 Nbatch = ops.Nbatch;
 twind = ops.twind;
@@ -53,7 +54,7 @@ while ibatch<=Nbatch
     
    
     % determine any threshold crossings
-    datr = datr./std(datr,1,1);
+    datr = datr./(mad(datr,1) * 1.4826);
     
     mdat = my_min(datr, 30, 1);
     ind = find(datr<mdat+1e-3 & datr<ops.spkTh);

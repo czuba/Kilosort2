@@ -685,11 +685,11 @@ classdef ksGUI < handle
             if isempty(obj.ops.minfr_goodchannels)||isnan(obj.ops.minfr_goodchannels)
                 obj.ops.minfr_goodchannels = 0.1;
             end
-            if obj.ops.minfr_goodchannels==0
+%             if obj.ops.minfr_goodchannels==0
                 obj.ops.throw_out_channels = false;
-            else
-                obj.ops.throw_out_channels = true;
-            end
+%             else
+%                 obj.ops.throw_out_channels = true;
+%             end
             obj.H.settings.setMinfrEdt.String = num2str(obj.ops.minfr_goodchannels);
 
             obj.ops.fs = str2num(obj.H.settings.setFsEdt.String);
@@ -729,7 +729,7 @@ classdef ksGUI < handle
             
             % do preprocessing
             obj.ops.gui = obj; % for kilosort to access, e.g. calling "log"
-            try
+%             try
                 obj.log('Preprocessing...'); 
                 obj.rez = preprocessDataSub(obj.ops);
                 
@@ -760,10 +760,10 @@ classdef ksGUI < handle
                 % update gui with results of preprocessing
                 obj.updateDataView();
                 obj.log('Done preprocessing.'); 
-            catch ex
-                obj.log(sprintf('Error preprocessing! %s', ex.message));
-                keyboard
-            end
+%             catch ex
+%                 obj.log(sprintf('Error preprocessing! %s', ex.message));
+%                 keyboard
+%             end
             
         end
         
@@ -787,7 +787,7 @@ classdef ksGUI < handle
         
         function runSpikesort(obj)
             % fit templates
-            try
+%             try
                 % pre-clustering to re-order batches by depth
                 obj.log('Pre-clustering to re-order batches by depth')
                 obj.rez = clusterSingleBatches(obj.rez);
@@ -819,9 +819,9 @@ classdef ksGUI < handle
                 obj.log('Kilosort finished!');  fprintf('\tKilosort finished!\n');
                 set(obj.H.settings.runSaveBtn, 'enable', 'on');
                 obj.updateDataView();
-            catch ex
-                obj.log(sprintf('Error running kilosort! %s', ex.message));
-            end   
+%             catch ex
+%                 obj.log(sprintf('Error running kilosort! %s', ex.message));
+%             end   
                         
         end
         
@@ -838,11 +838,11 @@ classdef ksGUI < handle
             fname = fullfile(obj.ops.saveDir, 'rez.mat');
             save(fname, 'rez', '-v7.3');
             
-            try
+%             try
                 rezToPhy(obj.rez, obj.ops.saveDir);
-            catch ex
-                obj.log(sprintf('Error saving data for phy! %s', ex.message));
-            end            
+%             catch ex
+%                 obj.log(sprintf('Error saving data for phy! %s', ex.message));
+%             end            
             obj.log('Done');
         end
             
@@ -1430,57 +1430,69 @@ classdef ksGUI < handle
         end
         
         function keyboardFcn(obj, ~, k)
-            switch k.Key
-                case 'uparrow'
-                    obj.P.nChanToPlot = obj.P.nChanToPlot+1;
-                    if obj.P.nChanToPlot > numel(obj.P.chanMap.chanMap)
-                        obj.P.nChanToPlot = numel(obj.P.chanMap.chanMap);
-                    end
-                case 'downarrow'
-                    obj.P.nChanToPlot = obj.P.nChanToPlot-1;
-                    if obj.P.nChanToPlot == 0
-                        obj.P.nChanToPlot = 1;
-                    end
-                case 'c'
-                    obj.P.colormapMode = ~obj.P.colormapMode;     
-                case '1'
-                    if obj.P.colormapMode 
-                        obj.P.showRaw = true; 
-                        obj.P.showWhitened = false;
-                        obj.P.showPrediction = false;
-                        obj.P.showResidual = false;
-                    else
-                        obj.P.showRaw = ~obj.P.showRaw;
-                    end
-                case '2'
-                    if obj.P.colormapMode
-                        obj.P.showRaw = false;
-                        obj.P.showWhitened = true;
-                        obj.P.showPrediction = false;
-                        obj.P.showResidual = false;
-                    else
-                        obj.P.showWhitened = ~obj.P.showWhitened;
-                    end
-                case '3'
-                    if obj.P.colormapMode
-                        obj.P.showRaw = false;
-                        obj.P.showWhitened = false;
-                        obj.P.showPrediction = true;
-                        obj.P.showResidual = false;
-                    else
-                        obj.P.showPrediction = ~obj.P.showPrediction;
+            m = get(obj.H.fig,'CurrentModifier');
+            
+            if isempty(m)
+                switch k.Key
+                    case 'uparrow'
+                        obj.P.nChanToPlot = obj.P.nChanToPlot+1;
+                        if obj.P.nChanToPlot > numel(obj.P.chanMap.chanMap)
+                            obj.P.nChanToPlot = numel(obj.P.chanMap.chanMap);
+                        end
+                    case 'downarrow'
+                        obj.P.nChanToPlot = obj.P.nChanToPlot-1;
+                        if obj.P.nChanToPlot == 0
+                            obj.P.nChanToPlot = 1;
+                        end
+                    case 'c'
+                        obj.P.colormapMode = ~obj.P.colormapMode;
+                    case '1'
+                        if obj.P.colormapMode
+                            obj.P.showRaw = true;
+                            obj.P.showWhitened = false;
+                            obj.P.showPrediction = false;
+                            obj.P.showResidual = false;
+                        else
+                            obj.P.showRaw = ~obj.P.showRaw;
+                        end
+                    case '2'
+                        if obj.P.colormapMode
+                            obj.P.showRaw = false;
+                            obj.P.showWhitened = true;
+                            obj.P.showPrediction = false;
+                            obj.P.showResidual = false;
+                        else
+                            obj.P.showWhitened = ~obj.P.showWhitened;
+                        end
+                    case '3'
+                        if obj.P.colormapMode
+                            obj.P.showRaw = false;
+                            obj.P.showWhitened = false;
+                            obj.P.showPrediction = true;
+                            obj.P.showResidual = false;
+                        else
+                            obj.P.showPrediction = ~obj.P.showPrediction;
+                            
+                        end
+                    case '4'
+                        if obj.P.colormapMode
+                            obj.P.showRaw = false;
+                            obj.P.showWhitened = false;
+                            obj.P.showPrediction = false;
+                            obj.P.showResidual = true;
+                        else
+                            obj.P.showResidual = ~obj.P.showResidual;
+                        end
                         
-                    end
-                case '4'
-                    if obj.P.colormapMode
-                        obj.P.showRaw = false;
-                        obj.P.showWhitened = false;
-                        obj.P.showPrediction = false;
-                        obj.P.showResidual = true;
-                    else
-                        obj.P.showResidual = ~obj.P.showResidual;
-                    end
-                    
+                end
+            elseif strcmp(m, 'control')
+                % don't break normal window focus shortcuts!
+                % - could not find equivalent of Editor window shortcut (cmd-shift-0), but that will
+                %   at least work from command window
+                switch k.Key
+                    case '0'                            
+                        commandwindow
+                end
             end
             obj.updateProbeView;
             obj.updateDataView;

@@ -4,6 +4,7 @@ rng('default'); rng(1);
 ops = rez.ops;
 
 if getOr(ops, 'reorder', 0)==0
+    cmdLog('Temporal reordering of batches disabled (as recommended)')
     rez.iorig = 1:rez.temp.Nbatch;
     return;
 end

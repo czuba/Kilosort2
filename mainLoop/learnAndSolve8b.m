@@ -1,4 +1,5 @@
 function rez = learnAndSolve8b(rez)
+tic
 
 ops = rez.ops;
 ops.fig = getOr(ops, 'fig', 1);
@@ -331,47 +332,16 @@ for ibatch = 1:niter
         fprintf('  %s, %d / %d batches, %d units, nspks: %2.4f, mu: %2.4f, nst0: %d, merges: %2.4f, %2.4f\n', ...
             tstring, ibatch, niter, Nfilt, sum(nsp), median(mu), numel(st0), ndrop)
         
-        %         keyboard;
-        
-        if ibatch==1
-            figHand = figure;
-        else
-            figure(figHand);
-        end
-       
-       if ops.fig
-           subplot(2,2,1)
-           imagesc(W(:,:,1))
-           title('Temporal Components')
-           xlabel('Unit number'); 
-           ylabel('Time (samples)'); 
-           box off;
-
-           subplot(2,2,2)
-           imagesc(U(:,:,1))
-           title('Spatial Components')
-           xlabel('Unit number'); 
-           ylabel('Channel number'); 
-           box off;
-
-           subplot(2,2,3)
-           plot(mu)
-           ylim([0 100])
-           title('Unit Amplitudes')
-           xlabel('Unit number'); 
-           ylabel('Amplitude (arb. units)');
-           box off;
-
-           subplot(2,2,4)
-           semilogx(1+nsp, mu, '.')
-           ylim([0 100])
-           xlim([0 100])
-           title('Amplitude vs. Spike Count')
-           xlabel('Spike Count'); 
-           ylabel('Amplitude (arb. units)');        
-           box off;
-           drawnow
-        end
+        if ops.fig
+            
+            if ibatch==1
+                figHand = figure;
+            else
+                figure(figHand);
+            end
+            
+            make_fig(W, U, mu, nsp);
+       end
     end
 end
 
