@@ -60,7 +60,8 @@ for k = 1:length(iPC)
         end
         if isfield(rez,'nspA')
             yyaxis right
-            plot(rez.nspA(u,:)')
+            hl = plot(rez.nspA(u,:)','.');
+            set(hl.MarkerHandle, 'Style','hbar', 'size',3);
             ylabel('spikes added','fontsize',8)
         end
         
@@ -90,7 +91,8 @@ for k = 1:length(iUA)
         end
         if isfield(rez,'nspA')
             yyaxis right
-            plot(rez.nspA(u,:)')
+            hl = plot(rez.nspA(u,:)','.');
+            set(hl.MarkerHandle, 'Style','hbar', 'size',3);
             ylabel('spikes added','fontsize',8)
         end
         

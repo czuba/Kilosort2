@@ -146,14 +146,14 @@ for ibatch = 1:niter
     k = iorder(ibatch); % k is the index of the batch in absolute terms
     
     % Tested "middle-out" method of extraction...no clear benefit
-    %     if k==rez.orderLearned(end)
-    %         % revert to state at end of learning
-    %         fprintf(2, '\n\t~~!!~~\tReverting to learned state for batch %d(#%d) ~~!!~~\n', ibatch, k);
-    %         W = gpuArray(rezLrn.W);
-    %         U = gpuArray(rezLrn.U);
-    %         mu = gpuArray(rezLrn.mu);
-    %         dWU = rezLrn.dWU;
-    %     end
+    if getOr(rez.ops, 'middleOut', 0) && k==rez.orderLearned(end)
+        % revert to state at end of learning
+        fprintf(2, '\n\t~~!!~~\tReverting to learned state for batch %d(#%d) ~~!!~~\n', ibatch, k);
+        W = gpuArray(rezLrn.W);
+        U = gpuArray(rezLrn.U);
+        mu = gpuArray(rezLrn.mu);
+        dWU = rezLrn.dWU;
+    end
         
         
     % loading a single batch (same as everywhere)
@@ -359,7 +359,7 @@ for ibatch = 1:niter
     % generously report status in command window
     doRefresh = (ibatch<10) ...
              || (ibatch<100 && rem(ibatch, 10)==1) ...
-             || (ibatch<500 && rem(ibatch, 20)==1) ...
+             || (ibatch<200 && rem(ibatch, 20)==1) ...
              || (rem(ibatch, 50)==1) ...
              || ibatch==niter;
     if doRefresh    %rem(ibatch, 100)==1

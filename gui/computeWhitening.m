@@ -4,6 +4,11 @@ function [ops, Wrot] = computeWhitening(ops)
 
 ops.nt0 	= getOr(ops, {'nt0'}, 61);
 
+if isfield(ops.chanMap, 'scaleproc')
+    % apply int scaling factor from chanMap
+    ops.scaleproc = ops.chanMap.scaleproc;
+end
+
 [chanMap, xc, yc, kcoords, NchanTOTdefault] = loadChanMap(ops.chanMap);
 ops.Nchan = numel(chanMap);
 ops.NchanTOT = getOr(ops, 'NchanTOT', NchanTOTdefault);
@@ -59,20 +64,16 @@ else
     DATA = [];
 end
 
+% 10 evenly spaced batches, exclude ends
 batchSubset = ceil(linspace(1,Nbatch,12));
 batchSubset = batchSubset(2:end-1);
 
-% ibatch = 1;
-% while ibatch<=5  
 for ibatch = batchSubset
     %drawnow; pause(0.05); 
     offset = max(0, twind + 2*NchanTOT*((NT - ops.ntbuff) * (ibatch-1) - 2*ops.ntbuff));
     fseek(fid, offset, 'bof');
     buff = fread(fid, [NchanTOT NTbuff], '*int16');
         
-%     if isempty(buff)
-%         break;
-%     end
     nsampcurr = size(buff,2);
     if nsampcurr<NTbuff
         buff(:, nsampcurr+1:NTbuff) = repmat(buff(:,nsampcurr), 1, NTbuff-nsampcurr);
@@ -81,23 +82,19 @@ for ibatch = batchSubset
     datr = ksFilter(buff, ops);
     
     CC        = CC + (datr' * datr)/NT;    
-    
-    %ibatch = ibatch + ops.nSkipCov;
 end
 % normalize by number of batches used
 CC = CC / length(batchSubset);
-% CC = CC / ceil((Nbatch-1)/ops.nSkipCov);
 
 fclose(fid);
 
-if ops.whiteningRange<Inf
-    %drawnow; pause(0.05); 
+if ops.whiteningRange<Nchan
     ops.whiteningRange = min(ops.whiteningRange, Nchan);
     Wrot = whiteningLocal(gather_try(CC), yc, xc, ops.whiteningRange);
 else
     [E, D] 	= svd(CC); drawnow; pause(0.05); 
     D       = diag(D); drawnow; pause(0.05); 
     eps 	= 1e-6; drawnow; pause(0.05); 
-    Wrot 	= E * diag(1./(D + eps).^.5) * E';
+    Wrot 	= gather(E * diag(1./(D + eps).^.5) * E');
 end
 Wrot    = ops.scaleproc * Wrot;

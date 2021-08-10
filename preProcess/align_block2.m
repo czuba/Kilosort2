@@ -75,6 +75,10 @@ if ops.fig
 end
 
 dall = zeros(niter, Nbatches);
+% sort hack to bias drift estimate toward zero when multiple max values exist
+% - particularly when all are zero in cases of zeroed out artifacts
+[~, dtOrdi] = sort(abs(dt));
+dtOrd = dt(dtOrdi);
 for iter = 1:niter    
     for t = 1:length(dt)
         % for each NEW potential shift, estimate covariance
@@ -88,7 +92,8 @@ for iter = 1:niter
         dcs = my_conv2(dc, .1*(niter-iter));
 
         % up until the very last iteration, estimate the best shifts
-        [~, imax] = max(dcs, [], 1);
+        [~, imax] = max(dcs(dtOrdi,:), [], 1);
+        imax = dtOrdi(imax); % convert sorted index to original index
         
         % align the data by these integer shifts
         for t = 1:length(dt)
@@ -107,14 +112,15 @@ for iter = 1:niter
 
     end
     if ops.fig
+        figure(H);
         subplot(spy, spx, (1:spx-1)+iter*spx);     % subplot(niter+1, 1, iter+1)
         imagesc(1:Nbatches, dt*ysp, dc);
         set(gca, 'YDir','normal');
         hold on
         % plot shift from this iteration
-        plot(1:Nbatches, dall(iter,:).*ysp, 'r:', 'linewidth',.5);
+        plot(1:Nbatches, dall(iter,:).*ysp, 'r-', 'linewidth',1);
         % identify target batch region
-        plot(ii, [0 0], '--k', 'linewidth',1);
+        plot(ii, [.8 .8]*max(ylim), '--w', 'linewidth',1);
         box off
         subplot(spy, spx, iter*spx+spx)
         imagesc(F0);

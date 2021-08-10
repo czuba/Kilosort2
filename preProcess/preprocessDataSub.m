@@ -24,12 +24,17 @@ function rez = preprocessDataSub(ops)
 % 2021-04-28  TBC  Cleaned & commented
 % 2021-05-05  TBC  Updated to generate preprocessed data file ranging from t0:tend+ntbuff
 %                  - accomodates non-zero tstart w/o sacrificing temporal correl w/ raw data file
+% 2021-06-24  TBC  if [ops.CAR] value >1, will use as sliding window for median outlier (spike)
+%                  when computing median (prevents high responsivity from skewing adjacent channels)
 % 
 
 %% Parse ops input & setup defaults
 % record date & time of Kilosort execution
 % - used by addFigInfo.m
 ops.datenumSorted = now;
+
+% tic for this function
+t00 = tic;
 
 % track git repo(s) with new utility (see <kilosortBasePath>/utils/gitStatus.m)
 if getOr(ops, 'useGit', 1)
@@ -42,7 +47,7 @@ ops.fig = getOr(ops, 'fig', 1);
 %   1==template projections, 2==amplitudes, 0==don't split
 ops.splitClustersBy = getOr(ops, 'splitClustersBy', 2);
 
-tic;
+
 ops.nt0 	  = getOr(ops, {'nt0'}, 61); % number of time samples for the templates (has to be <=81 due to GPU shared memory)
 ops.nt0min  = getOr(ops, 'nt0min', ceil(20 * ops.nt0/61)); % time sample where the negative peak should be aligned
 
@@ -112,13 +117,13 @@ else
     [b1, a1] = butter(3, ops.fshigh/ops.fs*2, 'high'); % the default is to only do high-pass filtering at 150Hz
 end
 
-cmdLog('Computing whitening matrix...', toc);
+cmdLog('Computing whitening matrix...', toc(t00));
 
 % Compute whitening matrix
 % this requires removing bad channels first
 Wrot = get_whitening_matrix_faster(rez); % outputs a rotation matrix (Nchan by Nchan) which whitens the zero-timelag covariance of the data
 
-cmdLog('Loading raw data and applying filters...', toc);
+cmdLog('Loading raw data and applying filters...', toc(t00));
 
 % open for reading raw data
 fid = fopen(ops.fbinary, 'r');
@@ -131,11 +136,7 @@ if fidW<3
     error('Could not open %s for writing.',ops.fproc);    
 end
 
-% weights to combine batches at the edge
-% - WAIT, WHAAAAAT????
-w_edge = linspace(0, 1, ops.ntbuff)';
 ntb = ops.ntbuff;
-datr_prev = gpuArray.zeros(ntb, ops.Nchan, 'single');
 
 % exponential smoothing
 dnom = 3; % rate of padding exponential decay
@@ -166,19 +167,39 @@ for ibatch = allBatches
     % % ---------------------------------------------------------------------------------------------------------------
     % % --- step inside gpufilter.m operations ---%
     % - unpacked this utility function b/c unhappy with buffer padding before demeaning 
-    
+        
     % subsample only good channels & transpose for filtering
-    datr = single(dat(chanMap,:))';    % dat dims now: [samples, channel]
+    datr = double(dat(chanMap,:))';    % dat dims now: [samples, channel]
 
     % --- Demean before padding ---
     % subtract within-channel means from each channel
-    datr = datr - mean(datr, 1); % subtract mean of each channel
+    datr = datr - mean(datr, 1);  % nans not possible, since just converted from int16 raw dat values
     
+        
+
     % CAR, common average referencing by median
+    % -----------------------------
+    % Ugly NANSUM workaround for demeaning & subtracting in presence of nan without injecting spurrious zeros
+    % -----------------------------
+    % - "mean(...'omitnan')" is marginally faster than "nanmean(...)"
+    % - BUT:  "nanmedian(...)" is significantly faster than "median(...'omitnan')"
+
     if doCAR
-        datr = datr - median(datr, 2); % subtract median across channels
+        if doCAR>1
+            % Demean across cahnnels, exclude outlier values (spikes) from mean calc
+            % - useful for moderate channel counts where reasonable for significant spiking
+            %   activity to influence median value across channels
+            datr = nansum(cat(3, datr, repmat(-nanmedian(filloutliers(datr, nan), 2), [1,NchanTOT])), 3);
+        else
+            datr = nansum(cat(3, datr, repmat(-nanmedian(datr, 2), [1,NchanTOT])), 3); % subtract median across channels
+        end
     end
     
+    if any(isnan(datr))
+        warning('NANs detected in batch raw data...inspect data validity and/or consider different CAR filtering option');
+        keyboard
+    end
+
     % Now can pad first & last batches with zeros
     %  if nsampcurr<NTbuff
     if bsampTrue(1) && bsampTrue(end)
@@ -222,25 +243,9 @@ for ibatch = allBatches
     datr = filter(b1, a1, datr); % causal forward filter again
     datr = flipud(datr); % reverse time back
 
-    %datr    = gpufilter(datr, ops, chanMap); % apply filters and median subtraction
-
     % % --- end of gpufilter.m operations ---%
     % % ---------------------------------------------------------------------------------------------------------------
-    
-    if 0
-        % % % !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! % % %
-        % Curious approach to soften potential abrupt steps between batches (??...due to demeaning and/or filtering?)
-        % - ...not really keen on manipulating the source data like this --TBC
-        datr(ntb + (1:ntb), :) = w_edge .* datr(ntb+ (1:ntb), :)  +  (1-w_edge) .* datr_prev;
         
-        datr_prev = datr(ntb +NT + (1:ops.ntbuff), :); % preserve trailing ntbuff samples to use for blending next batch
-        % b/c NTbatch was set to NT+3*ntbuff, this [datr_prev] section
-        % is actually a copy of the first few samples OF THE NEXT BATCH!
-        % - so the w_edge transitioning is actually blending data with copy of itself that was demeaned/filtered with
-        %   the preceeding batch
-        % % % !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! % % %
-    end
-    
     datr    = datr(ntb + (1:NT),:); % remove timepoints used as buffers
    
     datr    = datr * Wrot; % whiten the data and scale by [ops.scaleproc] for int16 range
@@ -252,12 +257,14 @@ for ibatch = allBatches
     % doesn't actually get sent to gpu right now (TBD: test if faster)
     count = fwrite(fidW, int16(datr'), 'int16'); % write this batch to binary file
     
-    pb.check(ibatch) % update progress bar in command window
+    %hit = pb.check(ibatch); % update progress bar in command window
+    updateProgressMessage(ibatch, ops.NprocBatch, t00,100,20);
     
     if count~=numel(datr)
         error('Error writing batch %g to %s. Check available disk space.', ibatch, ops.fproc);
     end
 end
+disp('Done.')
 
 % close the files
 fclose(fidW); 
@@ -278,6 +285,6 @@ end
 
 rez.Wrot    = gather(Wrot); % gather the whitening matrix as a CPU variable
 
-cmdLog(sprintf('Finished preprocessing %d batches.', Nbatch), toc);
+cmdLog(sprintf('Finished preprocessing %d batches.', Nbatch), toc(t00));
 
 end %main function

@@ -15,9 +15,11 @@ for i = 1:Nrank
     for j = 1:Nrank
         % the dot product factorizes into separable products for each spatio-temporal component
         utu0 = U0(:,:,i)' * U0(:,:,j); % spatial products
-        wtw0 =  mexWtW2(Params, W(:,:,i), W(:,:,j), utu0); % temporal convolutions get multiplied wit hthe spatial products
-        wtw0 = gather(wtw0); % take this matrix off the GPU (it's big)
-        WtW = WtW + wtw0; % add it to the full correlation array
+        %         wtw0 =  mexWtW2(Params, W(:,:,i), W(:,:,j), utu0); % temporal convolutions get multiplied wit hthe spatial products
+        %         wtw0 = gather(wtw0); % take this matrix off the GPU (it's big)
+        %         WtW = WtW + wtw0; % add it to the full correlation array
+        % simplify memory overhead
+        WtW = WtW + gather(mexWtW2(Params, W(:,:,i), W(:,:,j), utu0));
     end
 end
 

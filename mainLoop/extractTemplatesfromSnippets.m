@@ -108,7 +108,7 @@ dd = double(gather(dd));
 wPCA = gpuArray(single(U(:, 1:nPCs))); % take as many as needed
 
 % adjust the arbitrary sign of the first PC so its negativity is downward
-% - this is strange...why manipulate sign of PC1, but not the others? --TBC
+% - this is strange...what is source/effect of this 
 if sign(wPCA(ops.nt0min+1,1))>0
     fprintf(2, '~!~\tNotice:  sign flip of PC components detected & inverted during extractTemplatesfromSnippets.m operation...\n')
     %keyboard; % pause if unexpected polarity

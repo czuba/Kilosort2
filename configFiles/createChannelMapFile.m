@@ -60,10 +60,19 @@ pp = inputParser();
 pp.addParameter('name','');         % channel map name
 pp.addParameter('fs',40000);        % sampling frequency
 pp.addParameter('configFxn','');    % function handle to kilosort config function
+pp.KeepUnmatched = 1;               % allow additional user parameters
 pp.parse(varargin{:});
 argin = pp.Results;
+
+% incorporate additional inputs (...I swear this used to happen automatically)
+if ~isempty(pp.Unmatched)
+    for uf = fieldnames(pp.Unmatched)'  % counter cheat
+        argin.(uf{:}) = pp.Unmatched.(uf{:});
+    end
+end
             
 if isempty(argin.name)
+    % apply outside of parser so input fields can be used in name
     argin.name =  sprintf('example%dch%dk', nChan, round(argin.fs/1000));
 end
 

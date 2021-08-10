@@ -128,21 +128,13 @@ dmax  = 1 + ceil((ymax-dmin)/dd);
 % [spkTh] "template amplitude" threshold for the generic templates & initial driftmap depth estimates
 spkTh = 10;% [def=10]; % floor(ops.ThPre*1.25);
 % ~!~ [spkTh] must be integer for use w/in standalone_detector.m ~!~
-% - strange instability when set <10, resulting in erratic clipping of spike depth estimates
-%   - seemingly depths are not incorrectly computed, but instead clipped <= an arbitrary max depth,
-%     that is also variable batch-to-batch
-%   - looks almost like an applied downward drift shift, however depth of key features (a high amp spike band) are
-%     maintained & apparent shift does not alter lower (y-axis) edge of driftmap
-%
-% ***!!!*** sticking with arb. hard-coded spkTh=10 default seems to prevent, but cause for concern
-% ***!!!*** that similar clipping could be silently occurring during actual spike extraction
 
 
 % Extract all the spikes across the recording that are captured by the
 % generic templates. Very few real spikes are missed in this way. 
 [st3, rez] = standalone_detector(rez, spkTh);
 % NOTE:  [st3] output of  standalone_detector.m>>spikedetector3.cu  is *'int32'*
-%        - thus st3(:,3), spike threshold variance explained, is [lossy] integer
+%  - thus st3(:,3), spike threshold variance explained, is [lossy] integer
 %%
 
 % detected depths
@@ -207,6 +199,8 @@ dshift = imin * dd;
 if rez.ops.integerShifts
     % keep record of full-res dshifts for good measure
     rez.dshift0 = dshift;
+    % smooth dshift to reduce flip-flop jumps
+    dshift = smoothdata(dshift, 'movmean',6);
     % round shifts to integers of channel spacing
     dmin = median(diff(unique(rez.yc)));
     dshift = round(dshift./dmin).*dmin;
@@ -245,8 +239,9 @@ if getOr(ops, 'fig', 1)
     
     H = figure;
     set(H, 'name', ['driftMap_',fname])
-    hax1 = subplot(2+debugPlot,1,1); hold on; box off
-    hax2 = subplot(2+debugPlot,1,2); hold on; box off
+    nsubp = 2+1*(do_correction>0);
+    hax1 = subplot(nsubp,1,1); hold on; box off
+    hax2 = subplot(nsubp,1,2); hold on; box off
 
     for j = spkTh:100
         % for each amplitude bin, plot all the spikes of that size in the
@@ -331,11 +326,13 @@ rez.F0m = F0m;
 % - slow & just for confirmation of what the ACTUAL saved whitened data looks like
 
 if debugPlot % && any(rez.dshift)
-    if ~any(rez.dshift) || do_correction<=0
-        hax3 = subplot(3,1,3); hold on; box off
-        text(0,0,'( drift correction not applied to data [per ops flag] )', 'fontsize',12, 'FontAngle','italic', 'HorizontalAlignment','center');
-        axis(hax3, [-1 1 -1 1]);
-        axis(hax3, 'off');
+    if (~any(rez.dshift) || do_correction<=0) 
+        if nsubp>2
+            hax3 = subplot(nsubp,1,3); hold on; box off
+            text(0,0,'( drift correction not applied to data [per ops flag] )', 'fontsize',12, 'FontAngle','italic', 'HorizontalAlignment','center');
+            axis(hax3, [-1 1 -1 1]);
+            axis(hax3, 'off');
+        end
     else
         %% One more extraction & plot to show actual shifts applied
         % This is slow, but reassuring.  ....disable when certain of parameters
@@ -378,7 +375,7 @@ if debugPlot % && any(rez.dshift)
         ii = st3(:,3)>=spkTh;
         st_depth0 = st3(ii,2);
         
-        hax3 = subplot(3,1,3); hold on; box off
+        hax3 = subplot(nsubp,1,3); hold on; box off
         
         for j = spkTh:100
             % for each amplitude bin, plot all the spikes of that size in the

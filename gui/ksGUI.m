@@ -25,6 +25,8 @@ classdef ksGUI < handle
     % - quick way to set working/output directory when selecting a new file
     % - when selecting a new file, reset everything
     % - why doesn't computeWhitening run on initial load?
+    % 
+    % - disable automatic save settings on close (TBC)
 
     properties        
         H % struct of handles to useful parts of the gui
@@ -482,10 +484,11 @@ classdef ksGUI < handle
             obj.P.tWin = [0 0.1];
             obj.P.currY = 0;
             obj.P.currX = 0;
-            obj.P.nChanToPlot = 16;
-            obj.P.nChanToPlotCM = 16;
-            obj.P.selChans = 1:16;            
-            obj.P.vScale = 0.001;
+            initChanCount = 32;
+            obj.P.nChanToPlot = initChanCount;
+            obj.P.nChanToPlotCM = initChanCount;
+            obj.P.selChans = 1:initChanCount;            
+            obj.P.vScale = 0.0001;
             obj.P.dataGood = false;
             obj.P.probeGood = false;            
             obj.P.ksDone = false;
@@ -495,6 +498,7 @@ classdef ksGUI < handle
             obj.P.showWhitened = false;
             obj.P.showPrediction = false;
             obj.P.showResidual = false;
+            obj.P.saveSettingsOnClose = false;
             
             mfPath = fileparts(mfilename('fullpath'));
             cm = load(fullfile(mfPath, 'cmap.mat')); %grey/red
@@ -502,7 +506,7 @@ classdef ksGUI < handle
             
             % get gui defaults/remembered settings
             obj.P.settingsPath = fullfile(mfPath, 'userSettings.mat');
-            if exist(obj.P.settingsPath, 'file')
+            if 0 %exist(obj.P.settingsPath, 'file')
                 savedSettings = load(obj.P.settingsPath);
                 if isfield(savedSettings, 'lastFile')
                     obj.H.settings.ChooseFileEdt.String = savedSettings.lastFile;
@@ -527,7 +531,7 @@ classdef ksGUI < handle
         
         %% Select Data file callback
         function selectFileDlg(obj)
-            [filename, pathname] = uigetfile('*.*', 'Pick a data file.');
+            [filename, pathname] = uigetfile('*.dat', 'Pick a data file.');
             
             if filename~=0 % 0 when cancel
                 obj.H.settings.ChooseFileEdt.String = ...
@@ -1104,7 +1108,7 @@ classdef ksGUI < handle
                 t = obj.P.currT;
                 % error check selected channels with current chanMap
                 if any(obj.P.selChans>numel(obj.P.chanMap.chanMap))
-                    obj.P.selChans = 1:max(numel(obj.P.chanMap.chanMap),16);
+                    obj.P.selChans = 1:max(numel(obj.P.chanMap.chanMap), 32);   %16);
                 end
                 chList = obj.P.selChans;
                 tWin = obj.P.tWin;
@@ -1146,10 +1150,10 @@ classdef ksGUI < handle
                         Wrot = obj.P.Wrot(conn,conn);
                         if obj.P.ksDone
                              Wrot = Wrot / obj.ops.scaleproc;
-                        else
-                            Wrot = Wrot / sqrt(obj.ops.scaleproc);
+                             %                         else
+                             %                             Wrot = Wrot / sqrt(obj.ops.scaleproc);
                         end 
-                        datAllF = datAllF*Wrot;% / sqrt(obj.ops.scaleproc);
+                        datAllF = datAllF * Wrot;
                     end
                     datAllF = datAllF';
                     
@@ -1984,13 +1988,12 @@ classdef ksGUI < handle
                  end
              end
              
-             obj.P.skipSave = true;
              kilosort;
              
         end
         
         function cleanup(obj)
-            if ~isfield(obj.P, 'skipSave') || ~obj.P.skipSave
+            if ~isfield(obj.P, 'saveSettingsOnClose') || obj.P.saveSettingsOnClose
                 obj.saveGUIsettings();
             end
             fclose('all');

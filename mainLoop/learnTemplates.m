@@ -103,11 +103,13 @@ batchPhase = [batchPhase, 2*ones(1, length(iorder)-length(batchPhase))];
 % use equal duration of batch padding to walk templates back to starting batch of spike extraction
 % - hardcoded to batch==1, but should allow for user override if alternate extractOrder is defined
 % - (...or future method of using integer datashift epochs as sort
-iorder = [iorder, min(hardeningBatches,25):-1:1];
 
 % Tested "middle-out" method of extraction...no clear benefit
-% iorder = [iorder, (ops.targBatch+25):-1:ops.targBatch];
-
+if getOr(rez.ops, 'middleOut', 0)
+    iorder = [iorder, (ops.targBatch+25):-1:ops.targBatch];
+else
+    iorder = [iorder, min(hardeningBatches,25):-1:1];
+end
 
 batchPhase = [batchPhase, 3*ones(1, length(iorder)-length(batchPhase))];
 
@@ -487,48 +489,42 @@ for ibatch = 1:niter
     % generously report status in command window
     doRefresh = (ibatch<10) ...
              || (ibatch<20 && rem(ibatch, 10)==1) ...
-             || (ibatch<500 && rem(ibatch, 20)==1) ...
+             || (ibatch<200 && rem(ibatch, 20)==1) ...
              || (rem(ibatch, 50)==1) ...
              || diff(batchPhase(ibatch+[-1,0]))~=0 ... last batch of current Learning Phase
              || ibatch==niter ... final batch
              ;
     if doRefresh    %rem(ibatch, 100)==1
         % this is some of the relevant diagnostic information to be printed during training
-        %         fprintf('%2.2f sec, %d / %d batches, %d units, nspks: %2.4f, mu: %2.4f, nst0: %d, merges: %2.4f, %2.4f, %2.4f \n', ...
-        %             toc, ibatch, niter, Nfilt, sum(nsp), median(mu), numel(st0), ndrop);
         thisStr = sprintf('%3d / %d batches, phase %d, %d units,\t nspks: %7.2f, mu: %6.4f, nst0: %4d, merges: %2.3f, %2.3f, %2.3f', ...
             ibatch, niter, batchPhase(ibatch), Nfilt, sum(nsp), median(mu), numel(st0), ndrop);
         cmdLog(thisStr, toc);
 
-
-        % these diagnostic figures should be mostly self-explanatory
+        % Update diagnostic figures
         if ops.fig
-%             try
-                if ibatch==1 || diff(batchPhase(ibatch+[-1,0]))~=0
-                    if exist('figHand','var') && getOr(ops, 'fig', 1) % && evalin('base','exist(''figDir'',''var'');')
-                        try
-                            % save existing figure
-                            [~,fn] = fileparts(ops.saveDir);
-                            % - No PDF save ....for some reason, kilosort gui fig keeps taking over figure focus during PDF save
-                            figureFS({figHand, [get(figHand,'name'),'-',fn]});
-                            set(figHand, 'tag', fullfile(ops.saveDir,'figs')); % embed default save destination (used by saveFigTriplet.m)
-                            saveFigTriplet(0, [], {'mat','png'});
-                        end
+            if ibatch==1 || diff(batchPhase(ibatch+[-1,0]))~=0
+                if exist('figHand','var') && getOr(ops, 'fig', 1) % && evalin('base','exist(''figDir'',''var'');')
+                    try
+                        % save existing figure
+                        [~,fn] = fileparts(ops.saveDir);
+                        % - No PDF save ....for some reason, kilosort gui fig keeps taking over figure focus during PDF save
+                        figureFS({figHand, [get(figHand,'name'),'-',fn]});
+                        set(figHand, 'tag', fullfile(ops.saveDir,'figs')); % embed default save destination (used by saveFigTriplet.m)
+                        saveFigTriplet(0, [], {'mat','png'});
                     end
-                    % new figure at start and new Learning Phase
-                    figHand = figure;
-                    set(figHand,'name',sprintf('learnTemplates (P%d)',batchPhase(ibatch)))
-                    addFigInfo(ops, figHand);
-                else
-                    figure(figHand);
                 end
-                make_fig(W, U, mu, nsp, ibatch)           
-%             catch ME
-%                warning('Error making figure was: %s',ME.message);
-%             end
+                % new figure at start and new Learning Phase
+                figHand = figure;
+                set(figHand,'name',sprintf('learnTemplates (P%d)',batchPhase(ibatch)))
+                addFigInfo(ops, figHand);
+            else
+                figure(figHand);
+            end
+            make_fig(W, U, mu, nsp, ibatch)
         end
     end
 end
+
 if ~useMemMapping
     fclose(fid);
 end
@@ -542,14 +538,6 @@ if ops.fig>2
     xlim([0,length(filterAge)+1])
     hold off
 end
-% We need to memorize the state of the templates at this timepoint.
-% % % % final clean up, triage templates one last time
-% % % [W, U, dWU, mu, nsp, ndrop] = ...
-% % %     triageTemplates2(ops, iW, C2C, W, U, dWU, mu, nsp, ndrop);
-
-% !~!~!~!~!~!
-% LAST CHANCE TO STRAIGHTEN PC INVERSIONS !!!
-% !~!~!~!~!~!
 
 % final covariance matrix between all templates
 [WtW, iList] = getMeWtW(single(W), single(U), Nnearest);
@@ -562,10 +550,11 @@ rez.simScore = gather(max(WtW, [], 3));
 
 rez.iNeighPC    = gather(iC(:, iW));
 
-% the neihboring templates idnices are stored in iNeigh
+% the neihboring templates indices are stored in iNeigh
 rez.iNeigh   = gather(iList);
 
 
+% Memorize the state of the templates at this timepoint.
 rez = memorizeW(rez, W, dWU, U, mu); % memorize the state of the templates
 rez.ops = ops; % update these (only rez comes out of this script)
 rez.nsp = nsp;
@@ -584,12 +573,7 @@ if exist('figHand','var') && getOr(ops, 'fig', 1) % && evalin('base','exist(''fi
         saveFigTriplet(0, [], {'mat','png'});
     end
 end
-% % name figure ...now done upon figure creation
-% if ops.fig
-%     addFigInfo(ops, figHand);
-% end
+
 
 cmdLog('Finished learning templates.')
-% fprintf('Finished learning templates \n')
-%%
 
