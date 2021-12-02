@@ -406,7 +406,7 @@ if getOr(ops, 'fig', 1) && evalin('base','exist(''figDir'',''var'');')
     catch
         fname = get(H, 'name');
         fname(fname==32 | fname==44 | fname==filesep)='_'; % no spaces, commas, or [filesep] in figure name!
-        fname = [fname,datestr(now, '_yyyymmmdd_HH-MM-ss')];
+        fname = [fname,datestr(now, '_yyyymmmdd')];
         figDir = fullfile(figDir,'png');
         if ~exist(figDir,'folder')
             mkdir(figDir)

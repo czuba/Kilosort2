@@ -235,7 +235,7 @@ for ibatch = 1:niter
 
                                 tt = (0:chmax.block:NT)+1 + ops.ntbuff;
                                 for i = 1:length(tt)-1
-                                    jnk(i,:) = max(gather(dataRAW(tt(i):tt(i+1),:)));
+                                    jnk(i,:) = gather(max(dataRAW(tt(i):tt(i+1),:)));
                                 end
                                 chmax.vals = [chmax.vals(chmax.batchsamp+1:end,:); jnk];
                                 chmax.h.CData = chmax.vals';

@@ -1,5 +1,8 @@
 function make_fig(W, U, mu, nsp, ibatch)
 
+try
+    % wrap in try/catch just incase figure gets closed *while executing* (...because happened)
+    
 if nargin<5 || isempty(ibatch)
     batchStr = '';
 else
@@ -74,5 +77,10 @@ else
     colormap(Hsp, parula(nchan));
     cb = colorbar;
 end
-drawnow
 set(cb.Label, 'string','ch #')
+
+drawnow
+
+end %end try/catch
+
+end %main function

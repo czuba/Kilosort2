@@ -31,8 +31,8 @@ Fg = Fg - mean(Fg, 1);
 
 % initialize the target "frame" from a single batch
 % - allow to define relative location of target batch in file (...allowing flexibility for batch size)
-% - default 2/3 into file
-targBatch = getOr(ops, 'targBatch', 2/3) %475 % min(300, floor(size(Fg,3)*2/3));
+% - default midway into file
+targBatch = getOr(ops, 'targBatch', 0.5)
 if targBatch<1
     % set to nearest batch
     targBatch = floor(size(Fg,3) * targBatch);
@@ -41,8 +41,6 @@ else
     targBatch = min(round(targBatch), size(Fg,3));
 end
 
-% gerget batch is hardcoded
-%F0 = Fg(:,:, targBatch);
 % smooth across neighboring batches before proceeding
 j = ceil(.05 * Nbatches);
 F0 = my_conv2(Fg(:,:, targBatch+[-j:j]), 1, 3);
