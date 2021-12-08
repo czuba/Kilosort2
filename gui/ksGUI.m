@@ -95,7 +95,7 @@ classdef ksGUI < handle
         function build(obj, f)
             % construct the GUI with appropriate panels
             obj.H.fig = f;
-            obj.H.fsz = 16; % base font size
+            obj.H.fsz = get(groot,'defaultAxesFontSize'); % base font size
             obj.H.tracelw = 1; % base trace linewidth
             set(f, 'UserData', obj);
             
