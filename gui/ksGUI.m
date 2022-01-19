@@ -95,7 +95,7 @@ classdef ksGUI < handle
         function build(obj, f)
             % construct the GUI with appropriate panels
             obj.H.fig = f;
-            obj.H.fsz = get(groot,'defaultAxesFontSize'); % base font size
+            obj.H.fsz = get(groot, 'defaultUicontrolFontSize'); % base font size  ['defaultUicontrolFontSize' OR 'defaultAxesFontSize']
             obj.H.tracelw = 1; % base trace linewidth
             set(f, 'UserData', obj);
             
@@ -111,12 +111,12 @@ classdef ksGUI < handle
             obj.H.mainSection = uiextras.HBox(...
                 'Parent', obj.H.root);
             
-            obj.H.logPanel = uiextras.Panel(...
-                'Parent', obj.H.root, ...
-                'Title', 'Message Log', 'FontSize', 1*obj.H.fsz,...
-                'FontName', 'Myriad Pro');
+%             obj.H.logPanel = uiextras.Panel(...
+%                 'Parent', obj.H.root, ...
+%                 'Title', 'Message Log', 'FontSize', 1*obj.H.fsz,...
+%                 'FontName', 'Myriad Pro');
             
-            obj.H.root.Sizes = [-1 -20 -3];
+            obj.H.root.Sizes = [-1 -20];    %[-1 -20 -3];
             
             % -- Title bar
             obj.H.titleBar = uicontrol(...
@@ -151,7 +151,13 @@ classdef ksGUI < handle
                 'Parent', obj.H.setRunVBox, ...
                 'Title', 'Run', 'FontSize', 1.2*obj.H.fsz,...
                 'FontName', 'Myriad Pro');
-            obj.H.setRunVBox.Sizes = [-4 -1];
+
+            obj.H.logPanel = uiextras.Panel(...
+                'Parent', obj.H.setRunVBox, ... obj.H.root, ...
+                'Title', 'Message Log', 'FontSize', 1*obj.H.fsz,...
+                'FontName', 'Myriad Pro');
+            
+            obj.H.setRunVBox.Sizes = [-8 -2 -1];    %[-4 -1];
             
             obj.H.probePanel = uiextras.Panel(...
                 'Parent', obj.H.mainSection, ...
@@ -163,7 +169,7 @@ classdef ksGUI < handle
                 'Title', 'Data view', 'FontSize', 1.2*obj.H.fsz,...
                 'FontName', 'Myriad Pro', 'Padding', 5);
             
-            obj.H.mainSection.Sizes = [-2 -1 -5];
+            obj.H.mainSection.Sizes = [-3 -1 -7];
 
             
             %% Create Settings panel
@@ -465,7 +471,7 @@ classdef ksGUI < handle
             set(obj.H.timeLBtn, 'ButtonDownFcn', @(f,k)obj.timeClickLeftCB(f,k));
             set(obj.H.timeRBtn, 'ButtonDownFcn', @(f,k)obj.timeClickRightCB(f,k));            
             
-            obj.H.dataVBox.Sizes = [30 -6 100];
+            obj.H.dataVBox.Sizes = [30 -6 150];
             
             
             %% Create Message log box

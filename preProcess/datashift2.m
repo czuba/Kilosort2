@@ -52,6 +52,7 @@ function rez = datashift2(rez, do_correction)
 % ---
 % 2021-xx-xx  TBC  Evolved from original Kilosort
 % 2021-05-20  TBC  Cleaned & commented
+% 2021-12-21  TBC  Respect threshold value in [ops.ThPre] (...was hardcoded ==10)
 %
 
 
@@ -126,7 +127,7 @@ dmax  = 1 + ceil((ymax-dmin)/dd);
 
 
 % [spkTh] "template amplitude" threshold for the generic templates & initial driftmap depth estimates
-spkTh = 10;% [def=10]; % floor(ops.ThPre*1.25);
+spkTh = floor(ops.ThPre);% [def=10]; % floor(ops.ThPre*1.25);
 % ~!~ [spkTh] must be integer for use w/in standalone_detector.m ~!~
 
 
