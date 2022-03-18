@@ -25,19 +25,6 @@ rez.st3      = rez.st3(isort, :);
 rez.cProj    = rez.cProj(isort, :);
 rez.cProjPC  = rez.cProjPC(isort, :, :);
 
-%         % create st3 cell for unit-wise analysis
-%         [uu, ~, ui] = unique(rez.st3(:,2));
-%         st3cell = cell(size(uu));
-%         for i = uu'
-%             st3cell{i} = rez.st3(ii,:);
-%         end
-
-
-% ix = rez.st3(:,4)>12;
-% rez.st3 = rez.st3(ix, :);
-% rez.cProj = rez.cProj(ix, :);
-% rez.cProjPC = rez.cProjPC(ix, :,:);
-
 
 fs = dir(fullfile(savePath, '*.npy'));
 for i = 1:length(fs)
@@ -50,10 +37,6 @@ end
 spikeTimes = uint64(rez.st3(:,1));
 % [spikeTimes, ii] = sort(spikeTimes);
 spikeTemplates = uint32(rez.st3(:,2));
-% NO:  st3(:,5) is really batch#, not cluster# (!??...KS1 holdover?)
-% if size(rez.st3,2)>4
-%     spikeClusters = uint32(1+rez.st3(:,5));
-% end
 spikeBatch = uint32(rez.st3(:,5)); 
 
 amplitudes = rez.st3(:,3);
@@ -181,62 +164,54 @@ if ~isempty(savePath)
         writeNPY(similarTemplates, fullfile(savePath, 'similar_templates.npy'));
     end
 
-    % save a list of "good" clusters for Phy
-%     fileID = fopen(fullfile(savePath, 'channel_names.tsv'), 'w');
-%     fprintf(fileID, 'cluster_id%sKSLabel', char(9));
-%     for j = 1:Nchan
-%         fprintf(fileID, '%d%s%d', j-1,char(9),chanMap0ind(j));
-%         fprintf(fileID, char([13 10]));
-%     end
-%     fclose(fileID);
-
     % Duplicate "KSLabel" as "group", a special metadata ID for Phy, so that
     % filtering works as expected in the cluster view
     KSLabelFilename = fullfile(savePath, 'cluster_KSLabel.tsv');
     copyfile(KSLabelFilename, fullfile(savePath, 'cluster_group.tsv'));
 
-    % if raw/binary data file location is not same as save destination,
-    % attempt to create symlink to raw file
-    if ~strcmpi( fileparts(rez.ops.fbinary), rez.ops.saveDir)
-        fprintf(2, ['\n\tWARNING: raw data directory and save output data directory are distinct locations.'...
-            '\n\tAttempt to create symlink to raw data in save output directory...']);
-        try
-            [~, fname, ext] = fileparts(rez.ops.fbinary);
-            [err, msg] = system( sprintf('ln -sv %s %s', rez.ops.fbinary, fullfile(rez.ops.saveDir, [fname ext]) ));
-            if ~err
-                fprintf('successful!\n\t%s\n',msg)
-            else
-                % Note: symlinks won't work on certain file systems (needs extended attributes; not Fat32)
-                fprintf(2, 'failed.\n\t%s',msg)
-                fprintf(['\n\t%s','\n\t>>','\n\t%s'...
-                    '\n\tA copy of raw data may need to be added to output directory before starting Phy\n\n'], rez.ops.fbinary,rez.ops.saveDir);
-            end
-        end
-    end
-    
+    % % ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    % % ~~~ No longer necessary/useful ~~~
+    % %     driftMap requires complete copy of filtered continuous data ("proDat_....dat")
+    % % 
+    % % if raw/binary data file location is not same as save destination,
+    % % attempt to create symlink to raw file
+    % %     if ~strcmpi( fileparts(rez.ops.fbinary), rez.ops.saveDir)
+    % %         fprintf(2, ['\n\tWARNING: raw data directory and save output data directory are distinct locations.'...
+    % %             '\n\tAttempt to create symlink to raw data in save output directory...']);
+    % %         try
+    % %             [~, fname, ext] = fileparts(rez.ops.fbinary);
+    % %             [err, msg] = system( sprintf('ln -sv %s %s', rez.ops.fbinary, fullfile(rez.ops.saveDir, [fname ext]) ));
+    % %             if ~err
+    % %                 fprintf('successful!\n\t%s\n',msg)
+    % %             else
+    % %                 % Note: symlinks won't work on certain file systems (needs extended attributes; not Fat32)
+    % %                 fprintf(2, 'failed.\n\t%s',msg)
+    % %                 fprintf(['\n\t%s','\n\t>>','\n\t%s'...
+    % %                     '\n\tA copy of raw data may need to be added to output directory before starting Phy\n\n'], rez.ops.fbinary,rez.ops.saveDir);
+    % %             end
+    % %         end
+    % %     end
+    % % ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
     %make params file
     if ~exist(fullfile(savePath,'params.py'),'file')
         fid = fopen(fullfile(savePath,'params.py'), 'w');
 
         % use relative path name for preprocessed data file in params.py
+        %     ./proDat_<origRawFileName>.dat 
         [~, fname, ext] = fileparts(rez.ops.fproc);
         fprintf(fid, 'dat_path = ''%s''\n', fullfile('.',[fname,ext]));
-        
-        fprintf(fid,'n_channels_dat = %i\n',rez.ops.Nchan);
-        
-        fprintf(fid,'dtype = ''int16''\n');
-        fprintf(fid,'offset = 0\n');
+        fprintf(fid, 'n_channels_dat = %i\n',rez.ops.Nchan);
+        fprintf(fid, 'dtype = ''int16''\n');
+        fprintf(fid, 'offset = 0\n');
         if mod(rez.ops.fs,1)
             fprintf(fid,'sample_rate = %i\n',rez.ops.fs);
         else
             fprintf(fid,'sample_rate = %i.\n',rez.ops.fs);
         end
-%         fprintf(fid,'hp_filtered = False');
-        fprintf(fid,'hp_filtered = True\n');
-        
-        fprintf(fid,'template_scaling = 15.0\n');
-        
-        
+        fprintf(fid, 'hp_filtered = True\n');
+        fprintf(fid, 'template_scaling = 15.0\n');
         fclose(fid);
     end
 end

@@ -243,12 +243,16 @@ if getOr(ops, 'fig', 1)
     nsubp = 2+1*(do_correction>0);
     hax1 = subplot(nsubp,1,1); hold on; box off
     hax2 = subplot(nsubp,1,2); hold on; box off
-
-    for j = spkTh:100
+    
+    ampClim = round(prctile(st3(:,3), [.1 99.9]));
+    ampClim(2) = max(ampClim(2),50); % reveal low amplitudes
+%     ampCmax = round(max(50, ampMax*0.65));
+    climLabl  = sprintf('\t\tamplitude clim = [%d, %d]', ampClim);
+    for j = spkTh:max(st3(:, 3))
         % for each amplitude bin, plot all the spikes of that size in the
         % same shade of gray
         ix = st3(:, 3)==j; % the amplitudes are rounded to integers
-        thisCol = [1 1 1] * max(0, 1-j/60);
+        thisCol = [1 1 1] * max(0, 1-(j-spkTh/2)/ampClim(2)); % scale datapoint color range
         plot(hax1, st3(ix, 1)/ops.fs, st_depth0(ix), '.', 'color', thisCol) % the marker color here has been carefully tuned
         plot(hax2, st3(ix, 1)/ops.fs, st_depthD(ix), '.', 'color', thisCol) % the marker color here has been carefully tuned
     end
@@ -259,9 +263,14 @@ if getOr(ops, 'fig', 1)
     plot(hax1, xs, imin * dd +diff(ylim(hax2))/2, '-r');
     B = rez.ops.targBatch;
     plot(hax1, xs(B), imin(B) * dd +diff(ylim(hax2))/2, '*c');
+    % add channel numbers to yaxis
+    ych = floor(linspace(1,length(rez.yc),9));
+    text(hax1, xl(2)*ones(9,1), rez.yc(ych), num2str(ych(:)), 'color','c', 'VerticalAlignment','middle', 'FontSize',10)
 
     title(hax1, 'Drift map: Initial', 'interp','none')
     ylabel(hax1, 'Init spike position (um)')
+    xlh = xlabel(hax1, climLabl, 'HorizontalAlignment','left','fontsize',8);
+    set(xlh, 'position', get(xlh,'position').*[0,1,1]);
     title(hax2, 'Drift map: Corrected', 'interp','none')    
     ylabel(hax2, 'Shifted spike position (um)')
     xlabel(hax2, 'time (sec)')
@@ -403,7 +412,7 @@ if getOr(ops, 'fig', 1) && evalin('base','exist(''figDir'',''var'');')
     figDir = evalin('base','figDir');
     figureFS(H, 'portrait', 15*[1 1]); % standardize figure output
     try
-        saveFigTriplet(2, [], 'png');
+        saveFigTriplet(1, [], 'png');
     catch
         fname = get(H, 'name');
         fname(fname==32 | fname==44 | fname==filesep)='_'; % no spaces, commas, or [filesep] in figure name!

@@ -434,7 +434,8 @@ function Hsp = mkTemplateDebugFig
 figure(201);
 set(gcf, 'windowstyle','normal', 'position',[100,400, 2500, 200]);
 Hsp = subplot(1,11,[3:9]); % plot into axes handle
-set(Hsp, 'ylim',[-.1,1.1]);
+axis tight
+set(Hsp, 'ylim',[-.1,1.1], 'ticklength',[.01 .005]);
 end
 
 end % main function

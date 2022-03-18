@@ -1,6 +1,9 @@
 function rez = learnTemplates(rez, iorder)
 % This is the main optimization. Takes the longest time and uses the GPU heavily.  
 
+% changes (2022...mostly minor. --TBC)
+% - added upperlimit on hardeningBatches
+
 % Initialize various [missing] default ops
 rez.ops.fig = getOr(rez.ops, 'fig', 1); % whether to show plots every N batches
 
@@ -67,7 +70,8 @@ batchstart = 0:NT:NT*nBatches;
 % - allows any newly added templates to settle and/or be trimmed before advancing to spike extraction
 % - no new templates will be added during these batches
 % - an equal number of additonal batches will be
-ops.hardeningBatches = getOr(ops, 'hardeningBatches', ceil(0.50 * nBatches));
+% - upperlimit of 500 hardeningBatches
+ops.hardeningBatches = getOr(ops, 'hardeningBatches', min(ceil(0.50 * nBatches), 500));
 hardeningBatches = ops.hardeningBatches;
 
 % decay of gaussian spatial mask centered on a channel
@@ -105,10 +109,16 @@ batchPhase = [batchPhase, 2*ones(1, length(iorder)-length(batchPhase))];
 % - (...or future method of using integer datashift epochs as sort
 
 % Tested "middle-out" method of extraction...no clear benefit
+p3min = min(hardeningBatches, 50); % nBatches in phase3
 if getOr(rez.ops, 'middleOut', 0)
-    iorder = [iorder, (ops.targBatch+25):-1:ops.targBatch];
+    if ops.targBatch <= (nBatches-p3min+1)
+        iorder = [iorder, (ops.targBatch+p3min):-1:ops.targBatch];
+    else
+        % prevent error, but really shouldn't be used 
+        iorder = [iorder, (ops.targBatch-p3min):1:ops.targBatch];
+    end
 else
-    iorder = [iorder, min(hardeningBatches,25):-1:1];
+    iorder = [iorder, p3min:-1:1];
 end
 
 batchPhase = [batchPhase, 3*ones(1, length(iorder)-length(batchPhase))];
@@ -433,7 +443,7 @@ for ibatch = 1:niter
                 nNewFilt = size(dWU0,3);
                 iNewFilt = Nfilt + [1:nNewFilt];
                 
-                ndrop(3) = .9 * ndrop(3) + .1 * nNewFilt;
+                ndrop(3) = .9 * ndrop(3) + .1 * nNewFilt; %nNewFilt; %
                 
                 % new templates need to be integrated into the same format as all templates
                 dWU0 = double(dWU0);

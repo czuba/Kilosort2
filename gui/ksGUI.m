@@ -1092,11 +1092,20 @@ classdef ksGUI < handle
             % save final results as rez.mat
             fname = fullfile(obj.ops.saveDir, 'rez.mat');
             save(fname, 'rez', '-v7.3');
+
             % save .mat copy of chanmap
             chanMap = obj.ops.chanMap;
             save(fullfile(obj.ops.saveDir,'chanMap.mat'), 'chanMap');
-            toc
-
+            
+            % save ops struct (...avoid loading ENTIRE rez struct just to check a sort parameter)
+            oo = rez.ops;
+            % sort fields alphabetically [human-readable]
+            fn = fieldnames(oo);
+            [~, fni] = sort(lower(fn));
+            oo = orderfields(oo, fni);
+            save(fullfile(obj.ops.saveDir,'opsStruct.mat'), '-struct','oo');
+            
+            % Create & save Phy outputs
             rezToPhy(obj.rez, obj.ops.saveDir);
             toc
 
