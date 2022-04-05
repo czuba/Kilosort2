@@ -93,7 +93,7 @@ set(h,'PaperPosition',[n/2, n/2, sz(2)-n, sz(1)-n]);
 
 % just keep doing this till it sticks
 set(h,'PaperOrientation', ori);
-orient(ori); %...and again (thanks Matlab)
+orient(h, ori); %...and again (thanks Matlab)
 
 % silence unneeded outputs
 if nargout>0

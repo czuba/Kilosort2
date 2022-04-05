@@ -179,7 +179,7 @@ for ibatch = allBatches
 
     % CAR, common average referencing by median
     % -----------------------------
-    % Ugly NANSUM workaround for demeaning & subtracting in presence of nan without injecting spurrious zeros
+    % Ugly SUM(...,'omitnan') workaround for demeaning & subtracting in presence of nan without injecting spurrious zeros
     % -----------------------------
     % - "mean(...'omitnan')" is marginally faster than "nanmean(...)"
     % - BUT:  "nanmedian(...)" is significantly faster than "median(...'omitnan')"
@@ -189,9 +189,9 @@ for ibatch = allBatches
             % Demean across cahnnels, exclude outlier values (spikes) from mean calc
             % - useful for moderate channel counts where reasonable for significant spiking
             %   activity to influence median value across channels
-            datr = nansum(cat(3, datr, repmat(-nanmedian(filloutliers(datr, nan), 2), [1,NchanTOT])), 3);
+            datr = sum(cat(3, datr, repmat(-nanmedian(filloutliers(datr, nan), 2), [1,NchanTOT])), 3,'omitnan');
         else
-            datr = nansum(cat(3, datr, repmat(-nanmedian(datr, 2), [1,NchanTOT])), 3); % subtract median across channels
+            datr = sum(cat(3, datr, repmat(-nanmedian(datr, 2), [1,NchanTOT])), 3,'omitnan'); % subtract median across channels
         end
     end
     
